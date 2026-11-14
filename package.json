@@ -1,0 +1,31 @@
+{
+  "name": "intentguard",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Liquidity-aware SaaS procurement agent: Airwallex Issuing card controls + Visa Trusted Agent Protocol checkout",
+  "type": "module",
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "concurrently -k -n api,ui -c yellow,cyan \"npm:dev:api\" \"npm:dev:ui\"",
+    "dev:api": "tsx watch --clear-screen=false packages/server/src/index.ts",
+    "dev:ui": "npm run dev -w @intentguard/command-center-ui",
+    "start": "npm run build -w @intentguard/command-center-ui && NODE_ENV=production tsx packages/server/src/index.ts",
+    "test": "vitest run",
+    "typecheck": "tsc -p tsconfig.json --noEmit && npm run typecheck -w @intentguard/command-center-ui",
+    "demo:cli": "tsx packages/server/src/cliDemo.ts",
+    "sandbox:check": "tsx packages/server/src/sandboxCheck.ts"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.0",
+    "@types/node": "^22.10.0",
+    "concurrently": "^9.1.2",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2",
+    "vitest": "^2.1.9"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

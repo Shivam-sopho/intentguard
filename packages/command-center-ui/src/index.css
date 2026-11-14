@@ -1,0 +1,36 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: dark;
+}
+html, body, #root { min-height: 100%; }
+@media (min-width: 1024px) { html, body, #root { height: 100%; } }
+body { background: #0b0c10; }
+
+.panel {
+  @apply rounded-xl border border-ink-700 bg-ink-900/80;
+}
+.panel-title {
+  @apply flex items-center gap-2 border-b border-ink-700 px-4 py-2.5 text-[11px] font-semibold uppercase tracking-[0.14em] text-ink-300;
+}
+.chip {
+  @apply inline-flex items-center gap-1 rounded-md border px-1.5 py-0.5 font-mono text-[10px] font-medium uppercase tracking-wide;
+}
+.btn {
+  @apply inline-flex items-center justify-center gap-2 rounded-lg px-3.5 py-2 text-sm font-semibold transition disabled:cursor-not-allowed disabled:opacity-40;
+}
+.btn-primary { @apply btn bg-flame-500 text-ink-950 hover:bg-flame-400; }
+.btn-ghost { @apply btn border border-ink-600 bg-ink-800 text-ink-100 hover:border-ink-500 hover:bg-ink-700; }
+.btn-danger { @apply btn bg-status-critical text-white hover:brightness-110; }
+.btn-good { @apply btn bg-status-good text-ink-950 hover:brightness-110; }
+.mono { @apply font-mono; }
+
+.scrollbar-thin::-webkit-scrollbar { width: 6px; height: 6px; }
+.scrollbar-thin::-webkit-scrollbar-thumb { background: #33343d; border-radius: 3px; }
+
+@keyframes pulse-ring { 0% { box-shadow: 0 0 0 0 rgba(208,59,59,.55);} 70% { box-shadow: 0 0 0 12px rgba(208,59,59,0);} 100% { box-shadow: 0 0 0 0 rgba(208,59,59,0);} }
+.pulse-critical { animation: pulse-ring 1.6s ease-out infinite; }
+@keyframes slide-in { from { opacity: 0; transform: translateY(-4px);} to { opacity: 1; transform: none; } }
+.slide-in { animation: slide-in .25s ease-out; }
