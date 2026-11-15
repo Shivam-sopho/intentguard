@@ -4,7 +4,7 @@
 
 IntentGuard buys software subscriptions for a finance team. Claude reads the vendor's contract. Deterministic code forecasts 8 weeks of cash for every billing option and picks the cheapest one that never drops below a safety floor. A human approves those exact terms, and the agent gets an **Airwallex virtual Visa card** that can pay only that. It checks out with requests signed under the **Visa Trusted Agent Protocol**. If the vendor adds a fee or switches the plan at payment time, the card declines it, the agent freezes the card, and nothing is paid until a human decides.
 
-> **Demo video:** a 3-minute narrated walkthrough recorded against the live Airwallex sandbox, built by [`video/`](video/) (Kokoro voice, burned-in captions).
+> **Demo video:** a 5-minute narrated walkthrough recorded against the live Airwallex sandbox, including the real Airwallex dashboard, built by [`video/`](video/) (Kokoro voice, burned-in captions).
 
 > **Track:** Starter Kit 2, Intent-Bound Purchase Agent (Airwallex Issuing card controls), using the reserve-floor logic of Starter Kit 1 and a Visa TAP checkout. **Verified live** on the Airwallex sandbox.
 
@@ -147,6 +147,35 @@ The mock merchant verifies all of this at its edge. It looks up keys through a k
 `intentBinding` inside the payment container is an IntentGuard extension, not part of the TAP spec. Production TAP needs Visa onboarding and keys published in Visa's directory. This repo shows the protocol against a merchant we control.
 
 ## Run it
+
+### The easy way: ask Claude Code to run it
+
+If you use [Claude Code](https://claude.com/claude-code), let it set everything up and run the full flow for you:
+
+```bash
+git clone https://github.com/Shivam-sopho/intentguard.git
+cd intentguard
+claude
+```
+
+Then paste this prompt:
+
+```text
+Set up and run IntentGuard, following CLAUDE.md. Install dependencies, run the tests, start the app,
+then run the full flow end to end: upload a sample contract PDF, choose the plan, issue the card,
+let the vendor add a hidden fee so it gets blocked, settle at the approved price, and refund.
+Summarise what happened at each step, then tell me what to open in the browser.
+```
+
+Claude Code reads [`CLAUDE.md`](CLAUDE.md), which tells it how to:
+- install the dependencies and run the 40 tests;
+- start the API and UI;
+- drive all the steps through the API, including the PDF upload, the blocked $250 fee, settlement and the refund;
+- explain the result and hand you the UI at http://localhost:5173.
+
+Without Airwallex keys it runs on the labelled offline emulator. To see it on the **live Airwallex sandbox**, put your own sandbox keys in `.env` yourself (Claude will ask you to; never paste keys into the chat), and Claude will check them with `npm run sandbox:check` first. If you also connect the Airwallex Developer MCP, you can ask Claude to audit the transactions the run created.
+
+### Manually
 
 ```bash
 npm install
