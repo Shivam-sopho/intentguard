@@ -243,7 +243,9 @@ export class Orchestrator {
       let balanceSource = 'Scenario seed (emulator wallet)';
       let liveBalances: unknown;
 
-      if (cfg && !opts.forceEmulator) {
+      // AIRWALLEX_MODE=emulator pins the rail to the offline emulator even when keys are set.
+      const forceEmulator = opts.forceEmulator || process.env.AIRWALLEX_MODE === 'emulator';
+      if (cfg && !forceEmulator) {
         const live = new LiveAirwallexRail(cfg, this.deps.telemetry);
         try {
           const balances = await live.getBalances();
@@ -251,9 +253,15 @@ export class Orchestrator {
           this.rail = live;
           this.state.rail = { mode: 'LIVE', note: `Airwallex sandbox ${cfg.baseUrl}` };
           const usd = balances.find((b) => b.currency === 'USD');
-          if (usd && usd.available_amount > 0) {
+          // Sandbox wallets are often pre-funded with millions of demo dollars; at that scale a
+          // $9,600 SaaS decision is meaningless, so keep the scenario's operating balance and say so.
+          const maxRealistic = Number(process.env.INTENTGUARD_MAX_LIVE_BALANCE ?? 1_000_000);
+          if (usd && usd.available_amount > 0 && usd.available_amount <= maxRealistic) {
             openingBalance = usd.available_amount;
             balanceSource = 'Live Airwallex USD wallet (GET /api/v1/balances/current)';
+          } else if (usd && usd.available_amount > maxRealistic) {
+            balanceSource = 'Operating balance for this demo (Airwallex sandbox connected)';
+            this.t('ENGINE', `Sandbox USD wallet is pre-funded with ${formatMoney(usd.available_amount)}; using the ${formatMoney(SEED_OPENING_BALANCE)} operating balance so the reserve decision is realistic`, 'info');
           } else {
             balanceSource = 'Scenario seed - sandbox USD wallet is unfunded';
           }
@@ -265,7 +273,7 @@ export class Orchestrator {
         }
       } else {
         this.rail = new EmulatedAirwallexRail(this.deps.telemetry);
-        this.state.rail = { mode: 'EMULATOR', note: cfg ? 'Emulator forced by operator' : 'No AIRWALLEX_CLIENT_ID / AIRWALLEX_API_KEY configured' };
+        this.state.rail = { mode: 'EMULATOR', note: cfg ? 'Emulator selected (AIRWALLEX_MODE=emulator)' : 'No AIRWALLEX_CLIENT_ID / AIRWALLEX_API_KEY configured' };
         await this.rail.getBalances();
       }
       this.network = new IssuingNetworkSimulator(this.rail);

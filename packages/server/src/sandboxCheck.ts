@@ -18,7 +18,7 @@ async function main() {
   const balances = await rail.getBalances();
   console.log('Balances:', balances.map((b) => `${b.currency} ${b.available_amount}`).join(', ') || '(none)');
   try {
-    const r = await rail.http.request<{ items: unknown[] }>('GET', '/api/v1/issuing/cards?page_size=1', 'List cards (Issuing enabled?)');
+    const r = await rail.http.request<{ items: unknown[] }>('GET', '/api/v1/issuing/cards?page_size=10', 'List cards (Issuing enabled?)');
     console.log(`Issuing reachable: ${r.items?.length ?? 0} card(s) on first page`);
   } catch (e) {
     console.log('Issuing check failed:', (e as Error).message);
