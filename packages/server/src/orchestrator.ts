@@ -257,7 +257,7 @@ export class Orchestrator {
     const feeAmount = feeClause?.max_amount ?? Math.max(1, Math.round(smallest * 0.25));
     const sku = x.sku && x.sku !== 'UNKNOWN' ? x.sku : `${slug(x.vendor_name).toUpperCase()}-PLAN`;
     return {
-      merchant: { id: slug(x.vendor_name), name: x.vendor_name, mcc, country: 'US', domain: `checkout.${slug(x.vendor_name)}.example` },
+      merchant: { id: slug(x.vendor_name), name: x.vendor_name.trim().replace(/[.,;\s]+$/, ''), mcc, country: 'US', domain: `checkout.${slug(x.vendor_name)}.example` },
       sku,
       product: `${x.product}${x.seats ? ` - ${x.seats} seats` : ''}`,
       prices,

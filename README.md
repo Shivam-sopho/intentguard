@@ -4,6 +4,8 @@
 
 IntentGuard buys software subscriptions for a finance team. Claude reads the vendor's contract. Deterministic code forecasts 8 weeks of cash for every billing option and picks the cheapest one that never drops below a safety floor. A human approves those exact terms, and the agent gets an **Airwallex virtual Visa card** that can pay only that. It checks out with requests signed under the **Visa Trusted Agent Protocol**. If the vendor adds a fee or switches the plan at payment time, the card declines it, the agent freezes the card, and nothing is paid until a human decides.
 
+> **Demo video:** a 3-minute narrated walkthrough recorded against the live Airwallex sandbox, built by [`video/`](video/) (Kokoro voice, burned-in captions).
+
 > **Track:** Starter Kit 2, Intent-Bound Purchase Agent (Airwallex Issuing card controls), using the reserve-floor logic of Starter Kit 1 and a Visa TAP checkout. **Verified live** on the Airwallex sandbox.
 
 ## The problem
