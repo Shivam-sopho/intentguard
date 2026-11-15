@@ -97,7 +97,7 @@ function ModeChip({ state }: { state: RunState | null }) {
   const rail = state?.rail.mode;
   const llm = state?.llm.engine;
   const live = rail === 'LIVE';
-  const label = !rail ? 'Not connected' : live ? 'Airwallex sandbox' : 'Offline demo';
+  const label = !rail ? 'Airwallex: not connected' : live ? 'Airwallex: live sandbox' : 'Airwallex: emulator';
   return (
     <span
       className={`hidden items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] md:inline-flex ${live ? 'border-status-good/40 text-status-good' : 'border-ink-600 text-ink-300'}`}
@@ -105,7 +105,7 @@ function ModeChip({ state }: { state: RunState | null }) {
     >
       <span className={`h-1.5 w-1.5 rounded-full ${live ? 'bg-status-good' : rail ? 'bg-status-warn' : 'bg-ink-500'}`} />
       {label}
-      {llm && <span className="text-ink-500">· {llm === 'claude' ? 'Claude' : 'no LLM key'}</span>}
+      {llm && <span className="text-ink-500">· AI: {llm === 'claude' ? state?.llm.model : 'templates'}</span>}
     </span>
   );
 }

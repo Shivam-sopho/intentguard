@@ -43,7 +43,7 @@ export function NarrativeBlock({ title, n }: { title: string; n?: Narrative }) {
     <div className="rounded-2xl border border-ink-700 bg-ink-900/60 p-5">
       <div className="mb-2 flex flex-wrap items-center gap-2 text-[12px] text-ink-400">
         <ScrollText className="h-4 w-4" /> {title}
-        <span className="ml-auto">{n.trace.engine === 'claude' ? `Written by ${n.trace.model}` : 'Template (no Claude key set)'}</span>
+        <span className="ml-auto">{n.trace.engine === 'claude' ? `Written by ${n.trace.model}${n.trace.via === 'claude-code' ? ' via Claude Code' : ''}` : `Template${n.trace.error ? ' (Claude unavailable)' : ' (no model configured)'}`}</span>
         {!n.grounded && <span className="text-status-critical">unverified figures: {n.ungroundedFigures.join(', ')}</span>}
       </div>
       <p className="text-[15px] leading-relaxed text-ink-100">{n.text}</p>

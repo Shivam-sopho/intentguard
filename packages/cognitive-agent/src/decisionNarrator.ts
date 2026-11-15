@@ -4,7 +4,8 @@
  * check verifies that every dollar figure in the narrative appears in the facts.
  */
 import { formatMoney } from '@intentguard/deterministic-engine';
-import { CLAUDE_MODEL, claudeAvailable, FALLBACK_PARAMS, getClaude, LlmTrace } from './claude.js';
+import { CLAUDE_MODEL, FALLBACK_PARAMS, getClaude, llmBackend, LlmTrace } from './claude.js';
+import { runClaudeCode } from './claudeCode.js';
 
 export interface Narrative {
   text: string;
@@ -37,26 +38,32 @@ export function checkGrounding(text: string, facts: unknown): { grounded: boolea
 
 async function narrate(system: string, facts: unknown, instruction: string, fallback: () => string): Promise<Narrative> {
   const t0 = Date.now();
-  if (claudeAvailable()) {
+  const backend = llmBackend();
+  const prompt = `<engine_facts>\n${JSON.stringify(facts, null, 2)}\n</engine_facts>\n${instruction}`;
+  if (backend !== 'offline') {
     try {
-      const res = await getClaude().beta.messages.create({
-        model: CLAUDE_MODEL,
-        max_tokens: 4000,
-        ...FALLBACK_PARAMS,
-        output_config: { effort: 'low' },
-        system,
-        messages: [{ role: 'user', content: `<engine_facts>\n${JSON.stringify(facts, null, 2)}\n</engine_facts>\n${instruction}` }],
-      });
-      if (res.stop_reason === 'refusal') throw new Error('refusal');
-      const text = res.content.flatMap((b) => (b.type === 'text' ? [b.text] : [])).join('').trim();
+      let text: string;
+      let trace: LlmTrace;
+      if (backend === 'api') {
+        const res = await getClaude().beta.messages.create({
+          model: CLAUDE_MODEL,
+          max_tokens: 4000,
+          ...FALLBACK_PARAMS,
+          output_config: { effort: 'low' },
+          system,
+          messages: [{ role: 'user', content: prompt }],
+        });
+        if (res.stop_reason === 'refusal') throw new Error('refusal');
+        text = res.content.flatMap((b) => (b.type === 'text' ? [b.text] : [])).join('').trim();
+        trace = { engine: 'claude', via: 'api', model: res.model, ms: Date.now() - t0, input_tokens: res.usage.input_tokens, output_tokens: res.usage.output_tokens, stop_reason: res.stop_reason };
+      } else {
+        const res = await runClaudeCode({ system, prompt });
+        text = res.text.trim();
+        trace = { engine: 'claude', via: 'claude-code', model: res.model, ms: res.ms };
+      }
       if (!text) throw new Error('empty response');
       const g = checkGrounding(text, facts);
-      return {
-        text,
-        grounded: g.grounded,
-        ungroundedFigures: g.ungrounded,
-        trace: { engine: 'claude', model: res.model, ms: Date.now() - t0, input_tokens: res.usage.input_tokens, output_tokens: res.usage.output_tokens, stop_reason: res.stop_reason },
-      };
+      return { text, grounded: g.grounded, ungroundedFigures: g.ungrounded, trace };
     } catch (e) {
       const text = fallback();
       return { text, grounded: true, ungroundedFigures: [], trace: { engine: 'offline', ms: Date.now() - t0, error: (e as Error).message } };
@@ -111,7 +118,6 @@ export interface IncidentFacts {
   overage: number;
   unapproved_items: { sku: string; description: string; amount: number }[];
   rail_failure_reason: string;
-  rail_mode: string;
   approved_binding_hash: string;
   observed_binding_hash: string;
   card_status_after: string;

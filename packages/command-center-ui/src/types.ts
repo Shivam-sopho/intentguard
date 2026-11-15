@@ -55,6 +55,7 @@ export interface Verdict {
 
 export interface LlmTrace {
   engine: 'claude' | 'offline';
+  via?: 'api' | 'claude-code';
   model?: string;
   ms: number;
   error?: string;

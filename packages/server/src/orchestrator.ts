@@ -43,7 +43,7 @@ import {
   writeIncidentReport,
   writeSettlementSummary,
   claudeAvailable,
-  CLAUDE_MODEL,
+  llmLabel,
   LlmTrace,
 } from '@intentguard/cognitive-agent';
 import {
@@ -150,7 +150,7 @@ export class Orchestrator {
   private llmEvent(what: string, trace: LlmTrace, detail?: unknown) {
     this.deps.telemetry.emitEvent({
       channel: 'CLAUDE',
-      title: trace.engine === 'claude' ? `${what} (${trace.model}, ${trace.ms} ms)` : `${what} (offline template${trace.error ? ` - ${trace.error}` : ''})`,
+      title: trace.engine === 'claude' ? `${what} (${trace.model}${trace.via === 'claude-code' ? ' via Claude Code' : ''}, ${(trace.ms / 1000).toFixed(1)} s)` : `${what} (offline template${trace.error ? ` - ${trace.error}` : ''})`,
       level: trace.engine === 'claude' ? 'success' : 'warn',
       detail: { trace, ...((detail as object) ?? {}) },
     });
@@ -174,7 +174,7 @@ export class Orchestrator {
       busy: null,
       error: null,
       rail: { mode: null, note: 'not connected' },
-      llm: { engine: claudeAvailable() ? 'claude' : 'offline', model: claudeAvailable() ? CLAUDE_MODEL : 'offline templates' },
+      llm: { engine: claudeAvailable() ? 'claude' : 'offline', model: llmLabel() },
       tap: { keyid: this.agentKey.keyid, jwk: this.agentKey.publicJwk, verifications: 0 },
       triggers: [],
     };
@@ -292,6 +292,7 @@ export class Orchestrator {
       if (quote.status !== 200) throw new Error(`Merchant refused quote request (${quote.status})`);
       const document = String(quote.body);
 
+      this.t('CLAUDE', "Claude is reading the vendor's quote…");
       const parsed = await parseVendorContract(document);
       this.llmEvent('Claude extracted pricing + risk clauses', parsed.trace, { extraction: parsed.extraction });
       this.t('ENGINE', parsed.grounding.ok ? 'Grounding check passed: every price and quote found verbatim in the document' : `Grounding check FAILED: ${parsed.grounding.issues.map((i) => i.problem).join('; ')}`, parsed.grounding.ok ? 'success' : 'error', parsed.grounding);
@@ -315,6 +316,7 @@ export class Orchestrator {
       const chosenV = decision.verdicts.find((v) => v.optionId === chosen.id)!;
       const breachRow = cv.firstBreachWeek ? decision.projections[cheapest.id].weeks[cv.firstBreachWeek - 1] : null;
       const discount = chosen.annualizedCost > 0 ? Math.round(((chosen.annualizedCost - cheapest.annualizedCost) / chosen.annualizedCost) * 100) : 0;
+      this.t('CLAUDE', 'Claude is explaining the decision…');
       const narrative = await explainPlan({
         opening_balance: g.openingBalance,
         reserve_floor: g.reserveFloor,
@@ -522,6 +524,7 @@ export class Orchestrator {
 
       const limitsAfterFreeze = await this.rail.getCardLimits(cardId);
       const fee = this.state.contract?.parsed.extraction.risk_clauses.find((r) => r.kind === 'ONBOARDING_FEE') ?? null;
+      this.t('CLAUDE', 'Claude is writing the incident report…');
       const narrative = await writeIncidentReport({
         merchant: CLOUDSCALE.name,
         approved_amount: this.state.intent!.intent.billing.amount,
@@ -529,7 +532,6 @@ export class Orchestrator {
         overage: chargeCheck.overage,
         unapproved_items: chargeCheck.unapprovedLineItems,
         rail_failure_reason: order.authorization.failure_reason ?? 'APPROVED (reversed by agent)',
-        rail_mode: this.rail.mode,
         approved_binding_hash: chargeCheck.approvedBindingHash,
         observed_binding_hash: chargeCheck.observedBindingHash,
         card_status_after: frozen.card_status,
@@ -596,6 +598,7 @@ export class Orchestrator {
       const decision = this.state.plan!.decision;
       const chosen = decision.verdicts.find((v) => v.optionId === decision.recommendedOptionId)!;
       const trig = this.state.triggers[0];
+      this.t('CLAUDE', 'Claude is writing the audit note…');
       const narrative = await writeSettlementSummary({
         merchant: CLOUDSCALE.name,
         settled_amount: capture.raw.transaction_amount,

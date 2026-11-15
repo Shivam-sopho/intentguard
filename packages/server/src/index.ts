@@ -5,6 +5,7 @@ import { existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { createVendorStorefront, Telemetry } from '@intentguard/simulation-adapter';
 import { Orchestrator } from './orchestrator.js';
+import { llmLabel } from '@intentguard/cognitive-agent';
 
 const PORT = Number(process.env.PORT || 8787);
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -81,5 +82,5 @@ app.listen(PORT, () => {
   const live = process.env.AIRWALLEX_CLIENT_ID && process.env.AIRWALLEX_API_KEY;
   console.log(`IntentGuard API on http://localhost:${PORT}`);
   console.log(`  Airwallex: ${live ? 'sandbox credentials found (LIVE)' : 'no credentials -> EMULATOR'}`);
-  console.log(`  Claude:    ${process.env.ANTHROPIC_API_KEY ? process.env.CLAUDE_MODEL || 'claude-opus-5-5' : 'no ANTHROPIC_API_KEY -> offline templates'}`);
+  console.log(`  Model:     ${llmLabel()}`);
 });

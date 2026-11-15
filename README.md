@@ -87,6 +87,8 @@ The UI walks through the story one step per screen, with one action per step. Cl
 | `npm run sandbox:check` | Read-only probe of your Airwallex sandbox credentials (login, balances, Issuing) |
 | `npm start` | Production build of the UI served by the API on :8787 |
 
+**No Anthropic API key needed.** If the `claude` CLI is installed and logged in, the agent's language work (reading the quote, explaining decisions, writing reports) runs through Claude Code in headless mode (`claude -p`). It runs with all tools disabled, no MCP servers, no saved session and an empty working directory, so a prompt injection hidden in a vendor document has nothing to act on. Its structured output is validated with the same schema and grounding checks as the API path. Set `ANTHROPIC_API_KEY` to use the Anthropic API instead.
+
 **Modes are always labelled.** The header and every telemetry line show whether calls hit the **live Airwallex sandbox** or the **offline emulator**, and whether text came from **Claude** or an **offline template**. The emulator only runs when no credentials are configured or the sandbox is unreachable. It follows the documented Airwallex response shapes and semantics.
 
 **Live balance and the floor.** With sandbox credentials, the opening balance is your real USD wallet. The default reserve floor is the opening balance minus $18,000, which recreates the scenario's Week-7 squeeze for any balance. You can set the floor yourself in Act 1.

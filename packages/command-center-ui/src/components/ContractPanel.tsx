@@ -26,7 +26,7 @@ export function ContractPanel({ state }: { state: RunState | null }) {
     <div className="space-y-3 p-3">
       <div className="flex flex-wrap items-center gap-1.5">
         <span className={`chip ${c.parsed.trace.engine === 'claude' ? 'border-flame-500/50 text-flame-400' : 'border-status-warn/50 text-status-warn'}`}>
-          <Sparkles className="h-3 w-3" /> {c.parsed.trace.engine === 'claude' ? `${c.parsed.trace.model} · ${c.parsed.trace.ms}ms` : 'offline parser'}
+          <Sparkles className="h-3 w-3" /> {c.parsed.trace.engine === 'claude' ? `${c.parsed.trace.model}${c.parsed.trace.via === 'claude-code' ? ' via Claude Code' : ''} · ${(c.parsed.trace.ms / 1000).toFixed(1)}s` : 'offline parser'}
         </span>
         <span className={`chip ${g.ok ? 'border-status-good/40 text-status-good' : 'border-status-critical/60 text-status-critical'}`}>
           <BadgeCheck className="h-3 w-3" /> {g.ok ? 'grounded in source' : 'grounding failed'}
@@ -43,7 +43,7 @@ export function ContractPanel({ state }: { state: RunState | null }) {
           <div key={o.id} className="rounded-lg border border-ink-700 bg-ink-850 px-3 py-2">
             <div className="text-[11px] uppercase tracking-wide text-ink-400">{o.cadence === 'ANNUAL' ? 'Option A · Annual' : 'Option B · Monthly'}</div>
             <div className="font-mono text-[15px] font-semibold">{usd(o.charge_amount)}<span className="text-[11px] font-normal text-ink-400">{o.cadence === 'MONTHLY' ? '/mo' : ' upfront'}</span></div>
-            <div className="font-mono text-[11px] text-ink-400">12-mo {usd(o.annualized_cost)} · {o.refundable ? 'cancellable' : 'non-refundable'}</div>
+            <div className="font-mono text-[11px] text-ink-400">12-mo {usd(o.annualized_cost)} · {o.refundable ? 'refundable' : 'non-refundable'}</div>
           </div>
         ))}
       </div>

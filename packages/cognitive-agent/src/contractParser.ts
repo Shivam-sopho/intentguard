@@ -11,7 +11,8 @@ import { z } from 'zod';
 import { betaZodOutputFormat } from '@anthropic-ai/sdk/helpers/beta/zod';
 import type { BillingOption } from '@intentguard/deterministic-engine';
 import { toMajor, toMinor } from '@intentguard/deterministic-engine';
-import { CLAUDE_MODEL, claudeAvailable, FALLBACK_PARAMS, getClaude, LlmTrace } from './claude.js';
+import { CLAUDE_MODEL, FALLBACK_PARAMS, getClaude, llmBackend, LlmTrace } from './claude.js';
+import { runClaudeCode } from './claudeCode.js';
 
 const OptionSchema = z.object({
   id: z.string().describe('Stable id, e.g. ANNUAL_UPFRONT or MONTHLY'),
@@ -142,30 +143,43 @@ export function offlineParse(doc: string): ContractExtraction {
   };
 }
 
+/** JSON Schema for `claude --json-schema`: draft-07, without the $schema header the CLI rejects. */
+export function cliJsonSchema(): object {
+  const { $schema: _drop, ...schema } = z.toJSONSchema(ContractExtractionSchema, { target: 'draft-7' }) as Record<string, unknown>;
+  return schema;
+}
+
 export async function parseVendorContract(doc: string): Promise<ParsedContract> {
   const t0 = Date.now();
   let extraction: ContractExtraction;
   let trace: LlmTrace;
-  if (claudeAvailable()) {
-    try {
+  const backend = llmBackend();
+  const userPrompt = `<vendor_document>\n${doc}\n</vendor_document>\nExtract the structured contract terms.`;
+  try {
+    if (backend === 'api') {
       const res = await getClaude().beta.messages.parse({
         model: CLAUDE_MODEL,
         max_tokens: 16000,
         ...FALLBACK_PARAMS,
         output_config: { effort: 'low', format: betaZodOutputFormat(ContractExtractionSchema) },
         system: SYSTEM,
-        messages: [{ role: 'user', content: `<vendor_document>\n${doc}\n</vendor_document>\nExtract the structured contract terms.` }],
+        messages: [{ role: 'user', content: userPrompt }],
       });
       if (res.stop_reason === 'refusal' || !res.parsed_output) throw new Error(`no structured output (stop_reason=${res.stop_reason})`);
       extraction = res.parsed_output;
-      trace = { engine: 'claude', model: res.model, ms: Date.now() - t0, input_tokens: res.usage.input_tokens, output_tokens: res.usage.output_tokens, stop_reason: res.stop_reason };
-    } catch (e) {
+      trace = { engine: 'claude', via: 'api', model: res.model, ms: Date.now() - t0, input_tokens: res.usage.input_tokens, output_tokens: res.usage.output_tokens, stop_reason: res.stop_reason };
+    } else if (backend === 'claude-code') {
+      const res = await runClaudeCode({ system: SYSTEM, prompt: userPrompt, jsonSchema: cliJsonSchema() });
+      // Validate the CLI's structured output against the same schema the API path uses.
+      extraction = ContractExtractionSchema.parse(res.structured ?? JSON.parse(res.text));
+      trace = { engine: 'claude', via: 'claude-code', model: res.model, ms: res.ms };
+    } else {
       extraction = offlineParse(doc);
-      trace = { engine: 'offline', ms: Date.now() - t0, error: `Claude call failed, used offline parser: ${(e as Error).message}` };
+      trace = { engine: 'offline', ms: Date.now() - t0 };
     }
-  } else {
+  } catch (e) {
     extraction = offlineParse(doc);
-    trace = { engine: 'offline', ms: Date.now() - t0 };
+    trace = { engine: 'offline', ms: Date.now() - t0, error: `Claude call failed, used offline parser: ${(e as Error).message}` };
   }
   const g = groundExtraction(doc, extraction);
   return { extraction, options: g.options, grounding: { ok: g.ok, issues: g.issues }, trace };
