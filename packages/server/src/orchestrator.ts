@@ -108,6 +108,7 @@ export interface RunState {
   contractSource: ContractSource;
   catalog: Catalog;
   refund?: { amount: number; outcome: string; failure_reason?: string; limitsAfter: CardLimits; at: string };
+  reissue?: { fromCardId: string; toCardId: string; reason: string };
   blockedBotProbe?: { status: number; reason: string };
 }
 
@@ -740,7 +741,25 @@ export class Orchestrator {
       const cartCheck = verifyChargeAgainstIntent(intent, { merchantId: cart.merchant_id, merchantName: cart.merchant_name, mcc: cart.mcc, amount: cart.total, currency: 'USD', cadence: cart.cadence, lineItems: cart.line_items, source: 'CART' });
       if (!cartCheck.match) throw new Error(`Cart still drifts: ${cartCheck.summary}`);
 
-      const unfrozen = await this.rail.updateCard(this.state.card.card.card_id, { card_status: 'ACTIVE' });
+      // A SINGLE-use card is consumed by its first approved authorization, even if the agent
+      // reversed it (Airwallex then CLOSES the card). In that case issue a replacement card
+      // bound to the same signed intent instead of unfreezing.
+      const current = await this.rail.getCard(this.state.card.card.card_id);
+      let unfrozen: Card;
+      if (current.card_status === 'CLOSED') {
+        const payload = buildCardCreatePayload(intent, this.state.card.cardholderId, hash, { createdBy: 'IntentGuard Procurement Agent', activeDays: 35 });
+        let replacement = await this.rail.createCard(payload);
+        for (let i = 0; i < 10 && replacement.card_status === 'PENDING'; i++) {
+          await new Promise((r) => setTimeout(r, 800));
+          replacement = await this.rail.getCard(replacement.card_id);
+        }
+        this.state.reissue = { fromCardId: current.card_id, toCardId: replacement.card_id, reason: 'The single-use card was consumed by the reversed charge, so Airwallex closed it.' };
+        this.t('AIRWALLEX', `Single-use card was closed after the reversed charge; issued replacement ${replacement.card_number} under the same approval`, 'info', this.state.reissue);
+        this.state.card = { ...this.state.card, card: replacement, limits: await this.rail.getCardLimits(replacement.card_id), createPayload: payload };
+        unfrozen = replacement;
+      } else {
+        unfrozen = await this.rail.updateCard(current.card_id, { card_status: 'ACTIVE' });
+      }
       this.state.card.card = unfrozen;
       this.transition('CARD_ISSUED', { reapprovalSignatureValid: reVerified, bindingMatch: cartCheck.match, cardStatus: unfrozen.card_status, reason: 're-approved, cart matches intent' });
 

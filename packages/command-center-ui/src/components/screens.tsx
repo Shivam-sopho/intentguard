@@ -507,7 +507,7 @@ export function BlockedScreen(p: ScreenProps) {
           )}
           <Layer icon={<Eye className="h-4 w-4" />} title="The agent spotted the mismatch" body={`The charge's fingerprint didn't match the one you approved: ${diffWords || 'different terms'}.`} />
           <Layer icon={<Snowflake className="h-4 w-4" />} title={inc.railApproved ? 'The agent froze the card and reversed the charge' : 'The agent froze the card'} body={inc.railApproved ? 'The authorization was voided before it could settle. Nothing can be charged until you decide.' : 'Nothing can be charged to it until you decide what to do.'} />
-          <Layer icon={<AlertOctagon className="h-4 w-4" />} title="The vendor tried again, and failed" body={`It tried to charge ${usd(inc.retry?.amount ?? 0)} on its own. Declined: the card is frozen${inc.retry?.failure_reason ? ` (${inc.retry.failure_reason})` : ''}.`} />
+          <Layer icon={<AlertOctagon className="h-4 w-4" />} title="The vendor tried again, and failed" body={`It tried to charge ${usd(inc.retry?.amount ?? 0)} on its own. Declined${inc.retry?.failure_reason ? ` (${inc.retry.failure_reason})` : ''}: the card can't be charged any more.`} />
         </ol>
       </Card>
 
@@ -596,7 +596,9 @@ export function PaidScreen(p: ScreenProps) {
           </Recap>
           <Recap n={3}>You approved {usd(amount)} {perPeriod(cadence)}, and the agent got a card limited to exactly that.</Recap>
           <Recap n={4}>{merchant} tried to charge {usd(inc?.attemptedAmount)}. Blocked, card frozen.</Recap>
-          <Recap n={5}>You held them to the original terms, and {usd(amount)} was paid.</Recap>
+          <Recap n={5}>
+            You held them to the original terms{state.reissue ? '. The single-use card had been used up by the reversed charge, so the agent issued a replacement for the same approval' : ''}, and {usd(amount)} was paid.
+          </Recap>
         </ol>
       </Card>
 

@@ -77,8 +77,20 @@ function normalizeNumbers(text: string): Set<number> {
   return out;
 }
 
-function squash(s: string) {
-  return s.replace(/\s+/g, ' ').trim().toLowerCase();
+/**
+ * Normalize text for verbatim-quote comparison. PDF text extraction wraps lines inside
+ * hyphenated words ("12-\nmonth", "non-\nrefundable"), so whitespace after a hyphen is
+ * dropped, and curly quotes/dashes are folded to ASCII. Applied to both document and quote.
+ */
+export function squash(s: string) {
+  return s
+    .replace(/[\u2018\u2019]/g, "'")
+    .replace(/[\u201C\u201D]/g, '"')
+    .replace(/[\u2013\u2014]/g, '-')
+    .replace(/-\s+/g, '-')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toLowerCase();
 }
 
 export function groundExtraction(doc: string, x: ContractExtraction): { ok: boolean; issues: GroundingIssue[]; options: BillingOption[] } {

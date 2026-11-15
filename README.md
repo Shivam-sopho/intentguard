@@ -82,7 +82,7 @@ The UI walks through the story one step per screen, with one action per step. Cl
 
 | Command | What it does |
 |---|---|
-| `npm test` | 39 unit tests: Week-7 breach math, inclusive limits, split-charge block, hash drift, cadence flip, approval binding, TAP replay/path/expiry/key/nonce attacks, state-machine guards, LLM grounding, PDF extraction, emulator refund/reversal semantics |
+| `npm test` | 40 unit tests: Week-7 breach math, inclusive limits, split-charge block, hash drift, cadence flip, approval binding, TAP replay/path/expiry/key/nonce attacks, state-machine guards, LLM grounding, PDF extraction, emulator refund/reversal semantics |
 | `npm run demo:cli` | Headless end-to-end run of all five acts against a running API |
 | `npm run sandbox:check` | Read-only probe of your Airwallex sandbox credentials (login, balances, Issuing) |
 | `npm start` | Production build of the UI served by the API on :8787 |
@@ -92,6 +92,20 @@ The UI walks through the story one step per screen, with one action per step. Cl
 **Modes are always labelled.** The header and every telemetry line show whether calls hit the **live Airwallex sandbox** or the **offline emulator**, and whether text came from **Claude** or an **offline template**. The emulator only runs when no credentials are configured or the sandbox is unreachable. It follows the documented Airwallex response shapes and semantics.
 
 **Live balance and the floor.** With sandbox credentials, the opening balance is your real USD wallet. The default reserve floor is the opening balance minus $18,000, which recreates the scenario's Week-7 squeeze for any balance. You can set the floor yourself in Act 1.
+
+## Verified live on the Airwallex sandbox
+
+Every step runs against `api.sandbox.airwallex.com` with a US-registered sandbox organisation. These all succeed:
+- cardholder creation, virtual card creation with controls, and reading limits back;
+- simulated authorizations, with Airwallex itself returning `DECLINED` + `LIMIT_EXCEEDED` for the over-limit charge and `CARD_INACTIVE` for the frozen card;
+- freezing and unfreezing the card;
+- reversal, capture (`CLEARING`) and refund.
+
+The engine's predicted decision agreed with Airwallex's on every charge.
+
+Live behaviour the code handles:
+- **Single-use cards are consumed by their first approved authorization, even after a reversal.** Airwallex then closes the card. When that happens, the agent issues a replacement card bound to the same signed approval instead of unfreezing.
+- **Card issuing and the Developer MCP depend on the organisation's country.** An India-registered sandbox org got `Invalid issuance details` on card creation and "Connections are not available in your region" from the Developer MCP. Use an org registered in a country where Airwallex issues cards (AU, CA, EEA, HK, IL, MY, NZ, SG, UK, US).
 
 ## Upload any vendor contract
 
@@ -114,7 +128,7 @@ After settlement you can simulate a refund (`POST /api/v1/simulation/issuing/ref
 ## Airwallex MCP
 
 - **Docs MCP (used at runtime):** when a charge is declined, the agent calls `search_public_docs` on `https://mcp.sandbox.airwallex.com/docs`. It looks up the decline code (for example `LIMIT_EXCEEDED`) in Airwallex's "Transaction failure reasons" table and cites it in the incident report and on screen.
-- **Developer MCP:** this needs an interactive OAuth sign-in, not an API key, so it is not called by the app. Connect it in Claude Code with `claude mcp add-json airwallex-dev '{"type":"http","url":"https://mcp.sandbox.airwallex.com/developer"}'`, then `/mcp`.
+- **Developer MCP:** this needs an interactive OAuth sign-in, so the app doesn't call it directly. We connected it in Claude Code (`claude mcp add-json airwallex-dev '{"type":"http","url":"https://mcp.sandbox.airwallex.com/developer"}'`, then `/mcp`) and used it to independently audit the agent's live runs. `list_issuing_transactions` and `retrieve_card` show the same $1,250 `LIMIT_EXCEEDED` decline, the `CARD_INACTIVE` retry, the `CLEARED` $1,000, and the single-use card `CLOSED` after a reversal.
 
 ## Scenario numbers (verified by tests)
 

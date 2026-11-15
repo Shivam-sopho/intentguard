@@ -197,6 +197,8 @@ export class EmulatedAirwallexRail implements IssuingRail {
     if (!lc || lc.state !== 'AUTHORIZED') throw Object.assign(new Error('lifecycle not capturable'), { status: 400 });
     lc.state = 'CLEARED';
     const amount = body.transaction_amount ?? lc.amount;
+    const consumed = this.cardState(lc.cardId);
+    if (consumed.card.authorization_controls.allowed_transaction_count === 'SINGLE') consumed.card = { ...consumed.card, card_status: 'CLOSED' };
     const usd = this.balances.find((b) => b.currency === lc.currency);
     if (usd) {
       usd.available_amount = toMajor(toMinor(usd.available_amount) - toMinor(amount));
@@ -226,7 +228,9 @@ export class EmulatedAirwallexRail implements IssuingRail {
     if (!lc || lc.state !== 'AUTHORIZED') throw Object.assign(new Error('lifecycle not reversible'), { status: 400 });
     lc.state = 'REVERSED';
     const s = this.cardState(lc.cardId);
-    s.approvedCount = Math.max(0, s.approvedCount - 1);
+    // Matches the live sandbox: a SINGLE-use card is consumed by its first approved
+    // authorization, so reversing that authorization closes the card.
+    if (s.card.authorization_controls.allowed_transaction_count === 'SINGLE') s.card = { ...s.card, card_status: 'CLOSED' };
     for (const l of s.card.authorization_controls.transaction_limits.limits) {
       if (l.interval !== 'PER_TRANSACTION') s.spent[l.interval] = (s.spent[l.interval] ?? 0) - toMinor(lc.amount);
     }

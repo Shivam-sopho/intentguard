@@ -26,14 +26,13 @@ describe('Airwallex emulator semantics', () => {
     expect((await net.authorize(card.card_id, 250, 'USD', '5734', 'm')).failure_reason).toBe('CARD_INACTIVE');
   });
 
-  it('a reversed authorization frees a SINGLE-use card for the corrected charge', async () => {
-    const { net, card } = await setup('ANNUAL', 3000);
+  it('a SINGLE-use card is consumed by a reversed authorization (matches the live sandbox)', async () => {
+    const { rail, net, card } = await setup('ANNUAL', 3000);
     const drifted = await net.authorize(card.card_id, 300, 'USD', '5734', 'm');
     expect(drifted.outcome).toBe('AUTHORIZED');
     await net.reverse(drifted.raw.card_transaction_lifecycle_id!);
-    const ok = await net.authorize(card.card_id, 3000, 'USD', '5734', 'm');
-    expect(ok.outcome).toBe('AUTHORIZED');
-    expect((await net.capture(ok.raw.card_transaction_lifecycle_id!)).outcome).toBe('CLEARED');
+    expect((await rail.getCard(card.card_id)).card_status).toBe('CLOSED');
+    expect((await net.authorize(card.card_id, 3000, 'USD', '5734', 'm')).failure_reason).toBe('CARD_CLOSED');
   });
 
   it('refunds restore the cumulative limit', async () => {

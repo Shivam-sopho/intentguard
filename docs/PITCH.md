@@ -45,7 +45,7 @@ If the merchant changes the deal mid-checkout, IntentGuard stops it: an added fe
 
 ## What judges can verify
 
-- 39 unit tests:
+- 40 unit tests:
   - Week-7 breach math and the inclusive limit ($1,000.00 passes, $1,000.01 fails),
   - split-charge blocking and cadence-flip detection,
   - approval binding,
@@ -56,6 +56,10 @@ If the merchant changes the deal mid-checkout, IntentGuard stops it: an added fe
 - Upload any order form: the three sample PDFs lead to different decisions (CloudScale and Northbeam pick monthly; PageLight picks yearly because it is safe).
 - Every screen labels whether Airwallex is live or emulated, and whether the text came from Claude or a template.
 
+## Verified live
+
+All five steps run against the live Airwallex sandbox (US-registered org): real virtual card, real `LIMIT_EXCEEDED` and `CARD_INACTIVE` declines, freeze and unfreeze, reversal, capture and refund. The Airwallex Developer MCP independently confirms each transaction.
+
 ## Tracks
 
 - **Primary: Starter Kit 2, Intent-Bound Purchase Agent** (Airwallex Issuing card controls).
@@ -65,6 +69,6 @@ If the merchant changes the deal mid-checkout, IntentGuard stops it: an added fe
 ## Roadmap (not in this build)
 
 - Visa Intelligent Commerce (VIC) tokenized credentials (requires Visa onboarding).
-- Airwallex Developer MCP for read-only verification (requires OAuth sign-in).
+- Calling the Airwallex Developer MCP from inside the app for automated audits. Today it is used from Claude Code to cross-check live runs, because it requires an interactive OAuth sign-in.
 - Starter Kits 9 and 10 (require Airi CLI or merchant enablement).
 - AWS Bedrock AgentCore deployment.

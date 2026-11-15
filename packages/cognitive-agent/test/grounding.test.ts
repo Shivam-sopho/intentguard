@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { VENDOR_QUOTE_DOCUMENT } from '@intentguard/deterministic-engine';
-import { checkGrounding, groundExtraction, offlineParse } from '../src/index.js';
+import { checkGrounding, groundExtraction, offlineParse, squash } from '../src/index.js';
 
 describe('LLM output is untrusted: deterministic grounding', () => {
   it('accepts an extraction whose prices and quotes are in the document', () => {
@@ -41,5 +41,12 @@ describe('LLM output is untrusted: deterministic grounding', () => {
     const bad = checkGrounding('Blocked $1,250.00; saved $3,000.', facts);
     expect(bad.grounded).toBe(false);
     expect(bad.ungrounded).toEqual(['$3,000']);
+  });
+
+  it('treats PDF line-wrap hyphenation and curly quotes as verbatim', () => {
+    const pdfText = 'USD 9,600.00 billed\nimmediately for a 12-\nmonth term. Annual fees are non-\nrefundable. Cancel with 30 days\u2019 notice.';
+    expect(squash(pdfText)).toContain(squash('USD 9,600.00 billed immediately for a 12-month term'));
+    expect(squash(pdfText)).toContain(squash('Annual fees are non-refundable.'));
+    expect(squash(pdfText)).toContain(squash("Cancel with 30 days' notice."));
   });
 });

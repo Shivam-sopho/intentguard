@@ -164,5 +164,6 @@ export interface RunState {
     fee: LineItem;
   };
   refund?: { amount: number; outcome: string; failure_reason?: string; limitsAfter: { limits: Limit[] }; at: string };
+  reissue?: { fromCardId: string; toCardId: string; reason: string };
   blockedBotProbe?: { status: number; reason: string };
 }
