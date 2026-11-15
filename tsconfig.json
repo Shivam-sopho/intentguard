@@ -17,6 +17,8 @@
     "packages/cognitive-agent/src",
     "packages/cognitive-agent/test",
     "packages/simulation-adapter/src",
-    "packages/server/src"
+    "packages/server/src",
+    "packages/server/test",
+    "packages/simulation-adapter/test"
   ]
 }

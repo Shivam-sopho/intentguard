@@ -36,6 +36,19 @@ export class IssuingNetworkSimulator {
     return { ...mapSimulationResult(raw), raw };
   }
 
+  async refund(cardId: string, amount: number, currency: string, mcc: string, merchantName: string, lifecycleId?: string): Promise<NetworkResult> {
+    const raw = await this.rail.simulation.refund({
+      card_id: cardId,
+      transaction_amount: amount,
+      transaction_currency: currency,
+      card_transaction_lifecycle_id: lifecycleId,
+      merchant_category_code: mcc,
+      merchant_info: merchantName,
+    });
+    // A refund is a credit, so an APPROVED refund maps to "accepted" regardless of its type label.
+    return { outcome: raw.failure_reason || raw.process_result === 'DECLINED' ? 'FAILED' : 'CLEARED', failure_reason: raw.failure_reason, raw };
+  }
+
   async reverse(lifecycleId: string): Promise<NetworkResult> {
     const raw = await this.rail.simulation.reverse(lifecycleId);
     return { ...mapSimulationResult(raw), raw };

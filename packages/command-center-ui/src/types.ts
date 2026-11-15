@@ -141,15 +141,28 @@ export interface RunState {
     railAgreesWithPolicy?: boolean;
   };
   incident?: {
+    mode: 'FEE' | 'CADENCE_FLIP' | 'NONE';
+    attemptedCadence: string;
+    railApproved: boolean;
     verification: { approvedBindingHash: string; observedBindingHash: string; diffs: IntentDiff[]; unapprovedLineItems: LineItem[]; overage: number; summary: string };
     attemptedAmount: number;
     failureReason: string;
     cardStatusAfter: string;
-    retry?: { outcome: string; failure_reason?: string };
+    retry?: { outcome: string; failure_reason?: string; amount?: number };
+    docs: { failure_reason: string; category: string; description: string; next_steps: string; source: string } | null;
     narrative: Narrative;
   };
   reapproval?: { verified: boolean; approvedAt: string };
   settlement?: { order: { order_id: string; charged_amount: number; capture?: { outcome: string } }; narrative: Narrative; limitsAfter: { limits: Limit[] }; settledAt: string; cardStatus: string };
-  triggers: { id: string; week: number; condition: string; action: string; status: string }[];
+  triggers: { id: string; week: number; dueDate: string; condition: string; action: string; status: string }[];
+  contractSource: { name: string; kind: 'sample' | 'upload'; pages?: number; chars: number };
+  catalog: {
+    merchant: { id: string; name: string; mcc: string };
+    sku: string;
+    product: string;
+    prices: Partial<Record<'MONTHLY' | 'ANNUAL', number>>;
+    fee: LineItem;
+  };
+  refund?: { amount: number; outcome: string; failure_reason?: string; limitsAfter: { limits: Limit[] }; at: string };
   blockedBotProbe?: { status: number; reason: string };
 }

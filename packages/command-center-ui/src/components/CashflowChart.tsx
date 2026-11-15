@@ -44,22 +44,24 @@ export function CashflowChart({ state, compact = false }: { state: RunState | nu
 
   const annual = d.projections['ANNUAL_UPFRONT'];
   const monthly = d.projections['MONTHLY'];
+  const base = monthly ?? annual;
   const data = [
-    { week: 0, label: 'Today', annual: g.openingBalance, monthly: g.openingBalance },
-    ...monthly.weeks.map((w, i) => ({ week: w.week, label: `W${w.week}`, monthly: w.closing, annual: annual?.weeks[i]?.closing, mFlows: w.flows, aFlows: annual?.weeks[i]?.flows })),
+    { week: 0, label: 'Today', annual: annual ? g.openingBalance : undefined, monthly: monthly ? g.openingBalance : undefined },
+    ...base.weeks.map((w, i) => ({ week: w.week, label: `W${w.week}`, monthly: monthly?.weeks[i]?.closing, annual: annual?.weeks[i]?.closing, mFlows: (monthly ?? annual)?.weeks[i]?.flows, aFlows: annual?.weeks[i]?.flows })),
   ];
   const values = data.flatMap((r) => [r.annual, r.monthly]).filter((v): v is number => typeof v === 'number');
   const yMin = Math.floor((Math.min(g.reserveFloor, ...values) - 4000) / 2000) * 2000;
   const yMax = Math.ceil((Math.max(...values) + 2000) / 2000) * 2000;
-  const breachWeek = annual?.firstBreachWeek;
-  const breachRow = breachWeek ? annual.weeks[breachWeek - 1] : null;
+  const breaching = [annual, monthly].find((p) => p?.firstBreachWeek);
+  const breachRow = breaching?.firstBreachWeek ? breaching.weeks[breaching.firstBreachWeek - 1] : null;
+  const prices = state?.catalog?.prices ?? {};
   const chosen = d.recommendedOptionId;
 
   return (
     <div className="p-3">
       <div className="mb-2 flex flex-wrap items-center gap-x-4 gap-y-1 px-1 text-[12px]">
-        <LegendItem color={C.monthly} label="Monthly $1,000/mo" chosen={chosen === 'MONTHLY'} />
-        <LegendItem color={C.annual} label="Annual $9,600 upfront" chosen={chosen === 'ANNUAL_UPFRONT'} />
+        {monthly && <LegendItem color={C.monthly} label={`Monthly ${usd(prices.MONTHLY, 0)}/mo`} chosen={chosen === 'MONTHLY'} />}
+        {annual && <LegendItem color={C.annual} label={`Yearly ${usd(prices.ANNUAL, 0)} upfront`} chosen={chosen === 'ANNUAL_UPFRONT'} />}
         <span className="flex items-center gap-1.5 text-ink-300">
           <svg width="18" height="6"><line x1="0" y1="3" x2="18" y2="3" stroke={C.floor} strokeWidth="1.5" strokeDasharray="4 3" /></svg>
           Reserve floor {usd(g.reserveFloor, 0)}
@@ -85,7 +87,7 @@ export function CashflowChart({ state, compact = false }: { state: RunState | nu
               activeDot={{ r: 5, stroke: '#101116', strokeWidth: 2 }}
               isAnimationActive
               animationDuration={900}
-              label={<EndLabel last={data.length - 1} text="Annual" color={C.annual} />}
+              label={<EndLabel last={data.length - 1} text="Yearly" color={C.annual} />}
             />
             <Line
               type="linear"

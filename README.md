@@ -82,7 +82,7 @@ The UI walks through the story one step per screen, with one action per step. Cl
 
 | Command | What it does |
 |---|---|
-| `npm test` | 34 unit tests: Week-7 breach math, inclusive limits, split-charge block, hash drift, cadence flip, approval binding, TAP replay/path/expiry/key/nonce attacks, state-machine guards, LLM grounding |
+| `npm test` | 39 unit tests: Week-7 breach math, inclusive limits, split-charge block, hash drift, cadence flip, approval binding, TAP replay/path/expiry/key/nonce attacks, state-machine guards, LLM grounding, PDF extraction, emulator refund/reversal semantics |
 | `npm run demo:cli` | Headless end-to-end run of all five acts against a running API |
 | `npm run sandbox:check` | Read-only probe of your Airwallex sandbox credentials (login, balances, Issuing) |
 | `npm start` | Production build of the UI served by the API on :8787 |
@@ -92,6 +92,29 @@ The UI walks through the story one step per screen, with one action per step. Cl
 **Modes are always labelled.** The header and every telemetry line show whether calls hit the **live Airwallex sandbox** or the **offline emulator**, and whether text came from **Claude** or an **offline template**. The emulator only runs when no credentials are configured or the sandbox is unreachable. It follows the documented Airwallex response shapes and semantics.
 
 **Live balance and the floor.** With sandbox credentials, the opening balance is your real USD wallet. The default reserve floor is the opening balance minus $18,000, which recreates the scenario's Week-7 squeeze for any balance. You can set the floor yourself in Act 1.
+
+## Upload any vendor contract
+
+Step 2 takes the vendor's order form or terms as a PDF, `.txt` or `.md` file (up to 8 MB). PDF text is extracted deterministically with `unpdf`, and that same text is what Claude reads and what the grounding check verifies against. The mock merchant serves the uploaded document and prices its cart from it, so the whole flow runs on your contract.
+
+Three sample order forms are in `samples/` (and one click away in the UI). Each leads to a different decision:
+
+| Sample | Yearly vs monthly | Agent's decision |
+|---|---|---|
+| `cloudscale-order-form.pdf` | $9,600 upfront vs $1,000/mo | Yearly breaks the floor in week 7, so it picks **monthly** |
+| `northbeam-analytics-order-form.pdf` | $14,400 upfront vs $1,400/mo | Yearly breaks the floor in week 4, so it picks **monthly** |
+| `pagelight-status-order-form.pdf` | $3,000 upfront vs $300/mo | Both are safe, so it picks the cheaper **yearly** |
+
+At checkout you choose how the vendor misbehaves:
+- **Adds a fee:** the card limit declines it at the rail.
+- **Switches the plan:** when the new price is under the limit, the rail approves it. The agent's intent-hash check catches the plan change, freezes the card and reverses the authorization before it clears.
+
+After settlement you can simulate a refund (`POST /api/v1/simulation/issuing/refund`), which restores the card's limit. The week-N re-evaluation downloads as a calendar file (`/api/trigger.ics`).
+
+## Airwallex MCP
+
+- **Docs MCP (used at runtime):** when a charge is declined, the agent calls `search_public_docs` on `https://mcp.sandbox.airwallex.com/docs`. It looks up the decline code (for example `LIMIT_EXCEEDED`) in Airwallex's "Transaction failure reasons" table and cites it in the incident report and on screen.
+- **Developer MCP:** this needs an interactive OAuth sign-in, not an API key, so it is not called by the app. Connect it in Claude Code with `claude mcp add-json airwallex-dev '{"type":"http","url":"https://mcp.sandbox.airwallex.com/developer"}'`, then `/mcp`.
 
 ## Scenario numbers (verified by tests)
 

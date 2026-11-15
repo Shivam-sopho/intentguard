@@ -5,6 +5,7 @@ import { existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { createVendorStorefront, Telemetry } from '@intentguard/simulation-adapter';
 import { Orchestrator } from './orchestrator.js';
+import { contractToText } from './contractLoader.js';
 import { llmLabel } from '@intentguard/cognitive-agent';
 
 const PORT = Number(process.env.PORT || 8787);
@@ -20,7 +21,7 @@ const storefront = createVendorStorefront({
   registryUrl: () => `http://localhost:${PORT}/registry/keys`,
   telemetry,
 });
-orch = new Orchestrator({ telemetry, port: PORT, merchantState: () => storefront.state, resetMerchant: () => storefront.reset() });
+orch = new Orchestrator({ telemetry, port: PORT, configureMerchant: (next) => storefront.configure(next), resetMerchant: () => storefront.reset() });
 
 const app = express();
 app.use('/merchant', storefront.router);
@@ -32,7 +33,7 @@ app.get('/registry/keys', (req, res) => {
   res.json(orch.agentKey.publicJwk);
 });
 
-app.use('/api', express.json());
+app.use('/api', express.json({ limit: '12mb' }));
 
 app.get('/api/state', (_req, res) => res.json({ state: orch.state, telemetry: telemetry.log }));
 
@@ -68,19 +69,41 @@ app.post('/api/reset', action(async () => orch.reset()));
 app.post('/api/act1', action((req) => orch.act1({ reserveFloor: req.body?.reserveFloor, forceEmulator: req.body?.forceEmulator })));
 app.post('/api/act2', action(() => orch.act2()));
 app.post('/api/approve', action(() => orch.approveAndProvision()));
-app.post('/api/shock', action(() => orch.triggerShock()));
+app.post('/api/shock', action((req) => orch.triggerShock(req.body?.mode === 'CADENCE_FLIP' ? 'CADENCE_FLIP' : 'FEE')));
 app.post('/api/resolve', action(() => orch.resolve()));
 app.post('/api/probe/unsigned-bot', action(() => orch.probeUnsignedBot()));
+app.post('/api/refund', action(() => orch.refund()));
+
+// Upload the vendor's order form / terms (PDF, .txt or .md as base64 JSON).
+app.post(
+  '/api/contract',
+  action(async (req) => {
+    const { filename, mimeType, data } = req.body ?? {};
+    if (typeof filename !== 'string' || typeof data !== 'string') throw new Error('filename and data are required');
+    const { text, pages } = await contractToText(filename, String(mimeType ?? ''), data);
+    orch.loadContract(text, { name: filename.slice(0, 120), kind: 'upload', pages, chars: text.length });
+  }),
+);
+app.post('/api/contract/sample', action(async () => orch.loadContract('sample', { name: 'CloudScale order form (sample)', kind: 'sample', chars: 0 })));
+
+app.get('/api/trigger.ics', (_req, res) => {
+  const ics = orch.triggerIcs();
+  if (!ics) return res.status(404).send('No scheduled trigger yet');
+  res.set({ 'content-type': 'text/calendar; charset=utf-8', 'content-disposition': 'attachment; filename="intentguard-reevaluation.ics"' }).send(ics);
+});
+
+// Sample vendor order forms (PDF) for trying the upload flow.
+app.use('/samples', express.static(path.resolve(here, '../../../samples'), { index: false }));
 
 const uiDist = path.resolve(here, '../../command-center-ui/dist');
 if (process.env.NODE_ENV === 'production' && existsSync(uiDist)) {
   app.use(express.static(uiDist));
-  app.get(/^\/(?!api|merchant|registry).*/, (_req, res) => res.sendFile(path.join(uiDist, 'index.html')));
+  app.get(/^\/(?!api|merchant|registry|samples).*/, (_req, res) => res.sendFile(path.join(uiDist, 'index.html')));
 }
 
 app.listen(PORT, () => {
   const live = process.env.AIRWALLEX_CLIENT_ID && process.env.AIRWALLEX_API_KEY;
   console.log(`IntentGuard API on http://localhost:${PORT}`);
-  console.log(`  Airwallex: ${live ? 'sandbox credentials found (LIVE)' : 'no credentials -> EMULATOR'}`);
+  console.log(`  Airwallex: ${process.env.AIRWALLEX_MODE === 'emulator' ? 'EMULATOR (AIRWALLEX_MODE=emulator)' : live ? 'sandbox credentials found (LIVE)' : 'no credentials -> EMULATOR'}`);
   console.log(`  Model:     ${llmLabel()}`);
 });

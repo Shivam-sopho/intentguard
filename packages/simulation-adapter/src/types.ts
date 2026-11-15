@@ -40,7 +40,7 @@ export interface CardLimits {
 export interface SimulatedTransaction {
   process_result: 'APPROVED' | 'DECLINED';
   failure_reason?: string;
-  type: 'AUTHORIZATION' | 'CLEARING' | 'REVERSAL_AUTH';
+  type: 'AUTHORIZATION' | 'CLEARING' | 'REVERSAL_AUTH' | 'REFUND' | string;
   subtype?: string;
   card_id?: string;
   card_transaction_id?: string;
@@ -83,4 +83,5 @@ export interface IssuingSimulationApi {
   authorize(req: SimAuthRequest): Promise<SimulatedTransaction>;
   capture(lifecycleId: string, body?: { transaction_amount?: number; merchant_info?: string }): Promise<SimulatedTransaction>;
   reverse(lifecycleId: string, body?: { transaction_amount?: number }): Promise<SimulatedTransaction>;
+  refund(body: { card_id: string; transaction_amount: number; transaction_currency: string; card_transaction_lifecycle_id?: string; merchant_category_code?: string; merchant_info?: string }): Promise<SimulatedTransaction>;
 }

@@ -9,8 +9,6 @@ import {
   buildCardholderRestPayload,
   buildPaymentContainer,
   CardCreatePayload,
-  CLOUDSCALE,
-  CLOUDSCALE_SKU,
   decideBillingPlan,
   evaluateAuthorization,
   formatMoney,
@@ -26,6 +24,7 @@ import {
   PurchaseIntent,
   scheduledObligations,
   SEED_OPENING_BALANCE,
+  VENDOR_QUOTE_DOCUMENT,
   signApproval,
   signTapRequest,
   TapTag,
@@ -55,6 +54,11 @@ import {
   IssuingRail,
   LiveAirwallexRail,
   Order,
+  DEFAULT_CATALOG,
+  AirwallexDocsMcp,
+  type FailureReasonDoc,
+  type Catalog,
+  type ChaosMode,
   Telemetry,
   type RailMode,
 } from '@intentguard/simulation-adapter';
@@ -84,18 +88,47 @@ export interface RunState {
   card?: { card: Card; limits: CardLimits; cardholderId: string; createPayload: CardCreatePayload; mcpCardholderShape: unknown };
   tap?: { keyid: string; jwk: unknown; lastSignatureInput?: string; lastSignatureBase?: string; lastTag?: TapTag; verifications: number };
   checkout?: { cart: Cart; cartCheck: IntentVerification; order?: Order; chargeCheck?: IntentVerification; shadow?: ShadowDecision; railAgreesWithPolicy?: boolean };
-  incident?: { verification: IntentVerification; attemptedAmount: number; failureReason: string; frozenAt: string; cardStatusAfter: string; retry?: { outcome: string; failure_reason?: string }; narrative: Narrative; limitsAfterFreeze: CardLimits };
+  incident?: {
+    mode: ChaosMode;
+    verification: IntentVerification;
+    attemptedAmount: number;
+    attemptedCadence: string;
+    railApproved: boolean;
+    failureReason: string;
+    frozenAt: string;
+    cardStatusAfter: string;
+    retry?: { outcome: string; failure_reason?: string; amount?: number };
+    docs: FailureReasonDoc | null;
+    narrative: Narrative;
+    limitsAfterFreeze: CardLimits;
+  };
   reapproval?: ApprovalRecord & { verified: boolean };
   settlement?: { order: Order; narrative: Narrative; limitsAfter: CardLimits; settledAt: string; cardStatus: string };
-  triggers: { id: string; week: number; condition: string; action: string; status: 'SCHEDULED' }[];
+  triggers: { id: string; week: number; dueDate: string; condition: string; action: string; status: 'SCHEDULED' }[];
+  contractSource: ContractSource;
+  catalog: Catalog;
+  refund?: { amount: number; outcome: string; failure_reason?: string; limitsAfter: CardLimits; at: string };
   blockedBotProbe?: { status: number; reason: string };
+}
+
+export interface ContractSource {
+  name: string;
+  kind: 'sample' | 'upload';
+  pages?: number;
+  chars: number;
 }
 
 export interface OrchestratorDeps {
   telemetry: Telemetry;
   port: number;
-  merchantState: () => { chaosFee: boolean };
+  configureMerchant: (next: { quoteDocument?: string; catalog?: Catalog }) => void;
   resetMerchant: () => void;
+}
+
+const SAMPLE_SOURCE: ContractSource = { name: 'CloudScale order form (sample)', kind: 'sample', chars: VENDOR_QUOTE_DOCUMENT.length };
+
+function slug(s: string) {
+  return s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 40) || 'vendor';
 }
 
 function readAirwallexConfig() {
@@ -119,8 +152,13 @@ export class Orchestrator {
   readonly operatorKey = generateOperatorKey();
   private listeners = new Set<(s: RunState) => void>();
   private cachedCardholderId: string | null = null;
+  private contractSource: ContractSource = SAMPLE_SOURCE;
+  private catalog: Catalog = DEFAULT_CATALOG;
+
+  private docsMcp: AirwallexDocsMcp;
 
   constructor(private deps: OrchestratorDeps) {
+    this.docsMcp = new AirwallexDocsMcp(deps.telemetry);
     this.reset();
   }
 
@@ -177,8 +215,78 @@ export class Orchestrator {
       llm: { engine: claudeAvailable() ? 'claude' : 'offline', model: llmLabel() },
       tap: { keyid: this.agentKey.keyid, jwk: this.agentKey.publicJwk, verifications: 0 },
       triggers: [],
+      contractSource: this.contractSource,
+      catalog: this.catalog,
     };
     this.publish();
+  }
+
+  /**
+   * Load the vendor's order form / terms. The mock merchant serves exactly this document,
+   * and the agent fetches it over a TAP-signed request in Act 2. Loading a contract starts a
+   * fresh run (guardrails are kept if already set).
+   */
+  loadContract(document: string, source: ContractSource) {
+    if (this.state.busy) throw new Error(`Busy: ${this.state.busy}`);
+    if (this.state.act > 1) throw new Error('Start over before loading a different contract');
+    const text = source.kind === 'sample' ? VENDOR_QUOTE_DOCUMENT : document.replace(/\u0000/g, '').trim();
+    if (text.length < 80) throw new Error('That document has almost no readable text. If it is a scanned PDF, export it with selectable text.');
+    if (text.length > 60_000) throw new Error('That document is too long for this demo (60,000 characters max).');
+    this.contractSource = { ...source, chars: text.length };
+    this.catalog = source.kind === 'sample' ? DEFAULT_CATALOG : this.catalog;
+    this.deps.configureMerchant({ quoteDocument: source.kind === 'sample' ? VENDOR_QUOTE_DOCUMENT : text, catalog: this.catalog });
+    this.state.contractSource = this.contractSource;
+    this.state.catalog = this.catalog;
+    this.state.contract = undefined;
+    this.state.error = null;
+    this.t('OPERATOR', `Loaded vendor contract: ${source.name} (${text.length.toLocaleString()} characters${source.pages ? `, ${source.pages} pages` : ''})`, 'info');
+    this.publish();
+    return this.contractSource;
+  }
+
+  /** Build the merchant's catalog from the grounded extraction of the loaded contract. */
+  private catalogFromContract(parsed: ParsedContract): Catalog {
+    const x = parsed.extraction;
+    if (this.contractSource.kind === 'sample') return DEFAULT_CATALOG;
+    const mcc = /^\d{4}$/.test(x.merchant_category_code) ? x.merchant_category_code : '5734';
+    const prices: Catalog['prices'] = {};
+    for (const o of parsed.options) if (prices[o.cadence] === undefined) prices[o.cadence] = o.chargeAmount;
+    const feeClause = x.risk_clauses.find((r) => r.kind === 'ONBOARDING_FEE' && r.max_amount && r.max_amount > 0);
+    const smallest = Math.min(...parsed.options.map((o) => o.chargeAmount));
+    const feeAmount = feeClause?.max_amount ?? Math.max(1, Math.round(smallest * 0.25));
+    const sku = x.sku && x.sku !== 'UNKNOWN' ? x.sku : `${slug(x.vendor_name).toUpperCase()}-PLAN`;
+    return {
+      merchant: { id: slug(x.vendor_name), name: x.vendor_name, mcc, country: 'US', domain: `checkout.${slug(x.vendor_name)}.example` },
+      sku,
+      product: `${x.product}${x.seats ? ` - ${x.seats} seats` : ''}`,
+      prices,
+      fee: { sku: `${sku}-FEE`, description: feeClause ? 'Mandatory onboarding fee' : 'Unapproved service fee', amount: feeAmount },
+    };
+  }
+
+  /** iCalendar file for the scheduled re-evaluation trigger (week N from today). */
+  triggerIcs(): string | null {
+    const t = this.state.triggers[0];
+    if (!t) return null;
+    const start = new Date(t.dueDate);
+    const fmt = (d: Date) => d.toISOString().slice(0, 10).replace(/-/g, '');
+    const end = new Date(start.getTime() + 86_400_000);
+    const esc = (v: string) => v.replace(/([,;\\])/g, '\\$1').replace(/\n/g, '\\n');
+    return [
+      'BEGIN:VCALENDAR',
+      'VERSION:2.0',
+      'PRODID:-//IntentGuard//Procurement Agent//EN',
+      'BEGIN:VEVENT',
+      `UID:${t.id}@intentguard`,
+      `DTSTAMP:${new Date().toISOString().replace(/[-:]/g, '').slice(0, 15)}Z`,
+      `DTSTART;VALUE=DATE:${fmt(start)}`,
+      `DTEND;VALUE=DATE:${fmt(end)}`,
+      `SUMMARY:${esc(`IntentGuard: re-evaluate ${this.catalog.merchant.name} billing plan`)}`,
+      `DESCRIPTION:${esc(`${t.condition}. ${t.action}.`)}`,
+      'END:VEVENT',
+      'END:VCALENDAR',
+      '',
+    ].join('\r\n');
   }
 
   /** Serialize acts so double clicks cannot interleave money movements. */
@@ -307,6 +415,11 @@ export class Orchestrator {
       this.state.contract = { document, parsed };
       if (!parsed.grounding.ok || parsed.options.length < 1) throw new Error('Contract extraction failed deterministic grounding; refusing to plan on it');
 
+      this.catalog = this.catalogFromContract(parsed);
+      this.state.catalog = this.catalog;
+      this.deps.configureMerchant({ catalog: this.catalog });
+      this.t('MERCHANT', `Storefront priced from the order form: ${Object.entries(this.catalog.prices).map(([c, p]) => `${c.toLowerCase()} ${formatMoney(p!)}`).join(', ')}`, 'info', this.catalog);
+
       const g = this.state.guardrails;
       const decision = decideBillingPlan({ openingBalance: g.openingBalance, reserveFloor: g.reserveFloor, currency: 'USD', horizonWeeks: g.horizonWeeks, scheduled: g.scheduled }, parsed.options);
       for (const v of decision.verdicts) {
@@ -338,6 +451,7 @@ export class Orchestrator {
         savings_forgone: decision.savingsForgone,
         discount_percent: discount,
         upgrade_trigger: decision.upgradeTrigger ? { week: decision.upgradeTrigger.week, condition: decision.upgradeTrigger.condition } : null,
+        cheapest_is_chosen: cheapest.id === chosen.id,
         risk_clauses: parsed.extraction.risk_clauses.map(({ clause_ref, kind, summary, max_amount }) => ({ clause_ref, kind, summary, max_amount })),
       });
       this.llmEvent('Claude explained the reserve trade-off', narrative.trace, { grounded: narrative.grounded, ungrounded: narrative.ungroundedFigures });
@@ -347,6 +461,7 @@ export class Orchestrator {
         this.state.triggers.push({
           id: `trg_${randomUUID().slice(0, 8)}`,
           week: decision.upgradeTrigger.week,
+          dueDate: new Date(Date.now() + (decision.upgradeTrigger.week - 1) * 7 * 86_400_000).toISOString(),
           condition: decision.upgradeTrigger.condition,
           action: `Re-run projection for ${cheapest.label}; if safe, request approval to switch`,
           status: 'SCHEDULED',
@@ -359,9 +474,9 @@ export class Orchestrator {
       const intent: PurchaseIntent = {
         version: 'intentguard/1',
         intentId: `int_${randomUUID().slice(0, 12)}`,
-        merchant: CLOUDSCALE,
-        sku: parsed.extraction.sku || CLOUDSCALE_SKU,
-        description: `${parsed.extraction.product} - ${parsed.extraction.seats} seats`,
+        merchant: this.catalog.merchant,
+        sku: this.catalog.sku,
+        description: this.catalog.product,
         seats: parsed.extraction.seats,
         billing: { cadence: chosen.cadence, amount: chosen.chargeAmount, currency: 'USD' },
         reserveCheck: { inputHash: decision.inputHash, reserveFloor: g.reserveFloor, projectedMinBalance: chosenV.minBalance, minWeek: chosenV.minWeek },
@@ -472,7 +587,7 @@ export class Orchestrator {
       mcc: cart.mcc,
       amount: order.charged_amount,
       currency: 'USD',
-      cadence: cart.cadence,
+      cadence: order.charged_cadence ?? cart.cadence,
       lineItems: order.charged_line_items,
       source: 'AUTHORIZATION',
     };
@@ -520,10 +635,14 @@ export class Orchestrator {
     return { cart, order, chargeCheck };
   }
 
-  async triggerShock() {
-    return this.run('Act 3: checkout with vendor fee shock', async () => {
-      if (this.state.act !== 3 || !this.state.card) throw new Error('Approve and provision first');
-      await fetch(`${this.merchantBase}/_chaos`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ enabled: true }) });
+  async triggerShock(mode: Exclude<ChaosMode, 'NONE'> = 'FEE') {
+    return this.run('Act 3: checkout with vendor shock', async () => {
+      if (this.state.act !== 3 || !this.state.card || !this.state.intent) throw new Error('Approve and provision first');
+      if (mode === 'CADENCE_FLIP') {
+        const other = this.state.intent.intent.billing.cadence === 'MONTHLY' ? 'ANNUAL' : 'MONTHLY';
+        if (this.catalog.prices[other] === undefined) throw new Error(`This contract has no ${other.toLowerCase()} price, so the vendor cannot switch plans`);
+      }
+      await fetch(`${this.merchantBase}/_chaos`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ mode }) });
       const { order, chargeCheck } = await this.checkout(true);
 
       if (chargeCheck.match && order.authorization.outcome === 'AUTHORIZED') {
@@ -531,6 +650,10 @@ export class Orchestrator {
       }
       // ACT 4 - containment
       this.state.act = 4;
+      // Look up the decline code in Airwallex's docs (Docs MCP) while we contain the incident.
+      let docsLookup: Promise<FailureReasonDoc | null> | null = order.authorization.failure_reason
+        ? this.docsMcp.explainFailureReason(order.authorization.failure_reason).catch(() => null)
+        : null;
       this.t('ENGINE', `Intent hash mismatch: approved ${chargeCheck.approvedBindingHash.slice(0, 12)}… vs attempted ${chargeCheck.observedBindingHash.slice(0, 12)}…`, 'error', chargeCheck);
       const cardId = this.state.card.card.card_id;
       const frozen = await this.rail.updateCard(cardId, { card_status: 'INACTIVE' });
@@ -543,16 +666,25 @@ export class Orchestrator {
         this.t('ENGINE', 'Drifted authorization reversed before clearing', 'warn');
       }
 
-      // The merchant tries to sneak the fee through as a separate charge.
-      const retryRes = await fetch(`${this.merchantBase}/orders/${order.order_id}/retry-fee`, { method: 'POST' });
-      const retry = ((await retryRes.json()) as { authorization: { outcome: string; failure_reason?: string } }).authorization;
-      this.t('AIRWALLEX', retry.outcome === 'FAILED' ? `Separate $250 fee charge DECLINED: ${retry.failure_reason}` : 'Separate fee charge was not declined', retry.outcome === 'FAILED' ? 'success' : 'error', retry);
+      // The merchant tries to sneak the extra amount through as a separate charge.
+      const retryRes = await fetch(`${this.merchantBase}/orders/${order.order_id}/retry-extra`, { method: 'POST' });
+      const retryBody = (await retryRes.json()) as { amount: number; authorization: { outcome: string; failure_reason?: string } };
+      const retry = { ...retryBody.authorization, amount: retryBody.amount };
+      this.t('AIRWALLEX', retry.outcome === 'FAILED' ? `Separate ${formatMoney(retry.amount)} charge DECLINED: ${retry.failure_reason}` : 'Separate charge was not declined', retry.outcome === 'FAILED' ? 'success' : 'error', retry);
 
+      if (!docsLookup && retry.failure_reason) docsLookup = this.docsMcp.explainFailureReason(retry.failure_reason).catch(() => null);
       const limitsAfterFreeze = await this.rail.getCardLimits(cardId);
+      const docs = docsLookup ? await docsLookup : null;
       const fee = this.state.contract?.parsed.extraction.risk_clauses.find((r) => r.kind === 'ONBOARDING_FEE') ?? null;
       this.t('CLAUDE', 'Claude is writing the incident report…');
+      const railApproved = order.authorization.outcome === 'AUTHORIZED';
       const narrative = await writeIncidentReport({
-        merchant: CLOUDSCALE.name,
+        merchant: this.catalog.merchant.name,
+        change_type: mode === 'CADENCE_FLIP' ? 'billing plan switched' : 'unapproved fee added',
+        approved_cadence: this.state.intent!.intent.billing.cadence,
+        attempted_cadence: order.charged_cadence,
+        rail_outcome: railApproved ? 'approved by card network, then reversed by the agent before settlement' : 'declined by card limit',
+        funds_moved: false,
         approved_amount: this.state.intent!.intent.billing.amount,
         attempted_amount: order.charged_amount,
         overage: chargeCheck.overage,
@@ -562,16 +694,21 @@ export class Orchestrator {
         observed_binding_hash: chargeCheck.observedBindingHash,
         card_status_after: frozen.card_status,
         retry_failure_reason: retry.failure_reason ?? null,
-        contract_clause: fee ? { clause_ref: fee.clause_ref, summary: fee.summary, max_amount: fee.max_amount } : null,
+        airwallex_docs: docs ? { failure_reason: docs.failure_reason, description: docs.description, next_steps: docs.next_steps } : null,
+        contract_clause: fee && mode === 'FEE' ? { clause_ref: fee.clause_ref, summary: fee.summary, max_amount: fee.max_amount } : null,
       });
       this.llmEvent('Claude wrote the incident report', narrative.trace, { grounded: narrative.grounded });
       this.state.incident = {
+        mode,
         verification: chargeCheck,
         attemptedAmount: order.charged_amount,
+        attemptedCadence: order.charged_cadence,
+        railApproved: order.authorization.outcome === 'AUTHORIZED',
         failureReason: order.authorization.failure_reason ?? 'APPROVED_THEN_REVERSED',
         frozenAt: new Date().toISOString(),
         cardStatusAfter: frozen.card_status,
         retry,
+        docs,
         narrative,
         limitsAfterFreeze,
       };
@@ -590,12 +727,12 @@ export class Orchestrator {
       const { intent, intentHash: hash } = this.state.intent;
 
       // Operator holds the vendor to the ORIGINAL terms: re-sign the same intent hash.
-      const re = signApproval(hash, approver, this.operatorKey, `Re-approval after quarantine: hold vendor to ${formatMoney(intent.billing.amount)}; fee rejected`);
+      const re = signApproval(hash, approver, this.operatorKey, `Re-approval after quarantine: hold vendor to ${formatMoney(intent.billing.amount)} ${intent.billing.cadence.toLowerCase()}; change rejected`);
       const reVerified = verifyApproval(re, intent, this.operatorKey.publicKey);
       this.state.reapproval = { ...re, verified: reVerified };
-      this.t('OPERATOR', `Re-approved original intent ${hash.slice(0, 16)}…; onboarding fee rejected`, 'success', re);
+      this.t('OPERATOR', `Re-approved original intent ${hash.slice(0, 16)}…; vendor's change rejected`, 'success', re);
 
-      await fetch(`${this.merchantBase}/_chaos`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ enabled: false }) });
+      await fetch(`${this.merchantBase}/_chaos`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ mode: 'NONE' }) });
 
       // Cart must match the intent again before the card is released.
       const cartRes = await this.merchantFetch('/cart', 'agent-browser-auth', { method: 'POST', body: { sku: intent.sku, cadence: intent.billing.cadence, seats: intent.seats } });
@@ -626,7 +763,7 @@ export class Orchestrator {
       const trig = this.state.triggers[0];
       this.t('CLAUDE', 'Claude is writing the audit note…');
       const narrative = await writeSettlementSummary({
-        merchant: CLOUDSCALE.name,
+        merchant: this.catalog.merchant.name,
         settled_amount: capture.raw.transaction_amount,
         order_id: settledOrder.order_id,
         reserve_floor: this.state.guardrails!.reserveFloor,
@@ -638,6 +775,23 @@ export class Orchestrator {
       this.llmEvent('Claude wrote the settlement note', narrative.trace);
       this.state.settlement = { order: settledOrder, narrative, limitsAfter, settledAt: new Date().toISOString(), cardStatus: unfrozen.card_status };
       this.state.act = 5;
+      this.publish();
+      return this.state;
+    });
+  }
+
+  /** After settlement: simulate the merchant refunding the charge (e.g. a cancelled seat). */
+  async refund() {
+    return this.run('Refund: simulating a merchant refund', async () => {
+      const s = this.state.settlement;
+      const card = this.state.card?.card;
+      if (!s || !card || this.state.refund) throw new Error('Refund is available once, after settlement');
+      const amount = s.order.charged_amount;
+      const lifecycleId = s.order.authorization.raw.card_transaction_lifecycle_id;
+      const r = await this.network.refund(card.card_id, amount, 'USD', this.catalog.merchant.mcc, this.catalog.merchant.name, lifecycleId);
+      const limitsAfter = await this.rail.getCardLimits(card.card_id);
+      this.t('AIRWALLEX', r.outcome === 'FAILED' ? `Refund failed: ${r.failure_reason}` : `Refund of ${formatMoney(amount)} accepted; card limits restored`, r.outcome === 'FAILED' ? 'error' : 'success', { refund: r.raw, limitsAfter });
+      this.state.refund = { amount, outcome: r.outcome, failure_reason: r.failure_reason, limitsAfter, at: new Date().toISOString() };
       this.publish();
       return this.state;
     });

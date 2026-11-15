@@ -89,6 +89,7 @@ export interface PlanFacts {
   savings_forgone: number;
   discount_percent: number;
   upgrade_trigger: { week: number; condition: string } | null;
+  cheapest_is_chosen: boolean;
   risk_clauses: { clause_ref: string; kind: string; summary: string; max_amount: number | null }[];
 }
 
@@ -96,8 +97,17 @@ export function explainPlan(f: PlanFacts): Promise<Narrative> {
   return narrate(
     `You explain treasury-safe procurement decisions that deterministic code has already made. ${STYLE}`,
     f,
-    'In 3-4 sentences: explain why the engine rejected the cheaper option despite its discount, what was chosen, when the cheaper option will be reconsidered, and name the single contract clause that most threatens the approved price.',
+    f.cheapest_is_chosen
+      ? 'In 2-3 sentences: say the cheapest option is also safe and was chosen, give its lowest balance against the reserve floor, and name the single contract clause that most threatens the approved price. Do not discuss rejected options.'
+      : 'In 3-4 sentences: explain why the engine rejected the cheaper option despite its discount, what was chosen, when the cheaper option will be reconsidered, and name the single contract clause that most threatens the approved price.',
     () => {
+      const feeClause = f.risk_clauses.find((r) => r.kind === 'ONBOARDING_FEE');
+      if (f.cheapest_is_chosen && f.chosen_option) {
+        return (
+          `${f.chosen_option.label} at ${formatMoney(f.chosen_option.charge)} is the cheapest option and keeps the lowest balance at ${formatMoney(f.chosen_min_balance ?? 0)} in week ${f.chosen_min_week}, above the ${formatMoney(f.reserve_floor)} reserve floor. ` +
+          (feeClause ? `Watch clause ${feeClause.clause_ref}: ${feeClause.summary}` : '')
+        );
+      }
       const fee = f.risk_clauses.find((r) => r.kind === 'ONBOARDING_FEE');
       return (
         `${f.cheapest_option.label} saves ${f.discount_percent}% (${formatMoney(f.savings_forgone)} a year), but paying ${formatMoney(f.cheapest_option.charge)} upfront drops cash to ${formatMoney(f.cheapest_week_balance ?? 0)} in week ${f.cheapest_first_breach_week}, ${formatMoney(f.cheapest_shortfall)} below the ${formatMoney(f.reserve_floor)} reserve floor. ` +
@@ -113,6 +123,11 @@ export function explainPlan(f: PlanFacts): Promise<Narrative> {
 
 export interface IncidentFacts {
   merchant: string;
+  change_type: 'unapproved fee added' | 'billing plan switched';
+  approved_cadence: string;
+  attempted_cadence: string;
+  rail_outcome: 'declined by card limit' | 'approved by card network, then reversed by the agent before settlement';
+  funds_moved: false;
   approved_amount: number;
   attempted_amount: number;
   overage: number;
@@ -122,6 +137,8 @@ export interface IncidentFacts {
   observed_binding_hash: string;
   card_status_after: string;
   retry_failure_reason: string | null;
+  /** What Airwallex's own documentation says about the decline code (looked up via the Docs MCP). */
+  airwallex_docs: { failure_reason: string; description: string; next_steps: string } | null;
   contract_clause: { clause_ref: string; summary: string; max_amount: number | null } | null;
 }
 
@@ -129,10 +146,12 @@ export function writeIncidentReport(f: IncidentFacts): Promise<Narrative> {
   return narrate(
     `You write incident summaries for a finance operations team after an agentic checkout was blocked. ${STYLE}`,
     f,
-    'In 3-5 sentences: what the merchant attempted, which control stopped it and how, what the agent did to contain it, whether any money moved, and what the operator must decide now.',
+    'In 3-5 sentences: what the merchant attempted, which control stopped it and how, what the agent did to contain it, confirm that no money moved, and what the operator must decide now. Only mention a contract clause if contract_clause is provided.',
     () =>
-      `${f.merchant} attempted to authorize ${formatMoney(f.attempted_amount)} against a card approved for ${formatMoney(f.approved_amount)}, adding ${f.unapproved_items.map((i) => `"${i.description}" (${formatMoney(i.amount)})`).join(', ')}. ` +
-      `The Airwallex card's inclusive per-transaction limit declined it with ${f.rail_failure_reason}, and the agent's intent check found the charge hash ${f.observed_binding_hash.slice(0, 12)}… did not match the approved ${f.approved_binding_hash.slice(0, 12)}…. ` +
+      (f.change_type === 'billing plan switched'
+        ? `${f.merchant} tried to charge ${formatMoney(f.attempted_amount)} on a ${f.attempted_cadence.toLowerCase()} plan instead of the approved ${formatMoney(f.approved_amount)} ${f.approved_cadence.toLowerCase()} plan. `
+        : `${f.merchant} attempted to authorize ${formatMoney(f.attempted_amount)} against a card approved for ${formatMoney(f.approved_amount)}, adding ${f.unapproved_items.map((i) => `"${i.description}" (${formatMoney(i.amount)})`).join(', ')}. `) +
+      `The charge was ${f.rail_outcome}, and the agent's intent check found the charge hash ${f.observed_binding_hash.slice(0, 12)}… did not match the approved ${f.approved_binding_hash.slice(0, 12)}…. ` +
       `The agent froze the card (${f.card_status_after})${f.retry_failure_reason ? `, and a follow-up attempt to charge the fee separately was declined with ${f.retry_failure_reason}` : ''}. No money moved. ` +
       `${f.contract_clause ? `The fee traces to clause ${f.contract_clause.clause_ref}. ` : ''}The operator must either hold the vendor to the approved ${formatMoney(f.approved_amount)} or sign a new intent that includes the fee.`,
   );

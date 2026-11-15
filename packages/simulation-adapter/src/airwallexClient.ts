@@ -138,6 +138,9 @@ export class LiveAirwallexRail implements IssuingRail {
       reverse(lifecycleId, body = {}) {
         return http.request<SimulatedTransaction>('POST', `/api/v1/simulation/issuing/card_transaction_lifecycles/${lifecycleId}/reverse`, 'Reverse authorization', body);
       },
+      refund(body) {
+        return http.request<SimulatedTransaction>('POST', '/api/v1/simulation/issuing/refund', `Merchant refund ${body.transaction_amount} ${body.transaction_currency}`, { ...body });
+      },
     };
   }
 

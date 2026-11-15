@@ -64,6 +64,8 @@ Rules:
 - annualized_cost: for a monthly price, 12 x the monthly charge; for an annual upfront price, that price.
 - source_quote fields must be copied verbatim from the document (a short exact phrase containing the figure).
 - Flag every clause that can add cost or lock the buyer in (fees, auto-renewal, seat minimums, price changes, non-refundable terms).
+- If the document offers several product tiers, extract only the tier this order form is quoting (the one named in the order); return at most one option per billing cadence.
+- merchant_category_code: the 4-digit MCC if stated, otherwise the most likely MCC for the vendor (5734 for software).
 You do not decide which option to buy; downstream deterministic code does.`;
 
 function normalizeNumbers(text: string): Set<number> {
@@ -85,7 +87,13 @@ export function groundExtraction(doc: string, x: ContractExtraction): { ok: bool
   const flat = squash(doc);
   const options: BillingOption[] = [];
 
+  const seenCadence = new Set<string>();
   x.options.forEach((o, i) => {
+    if (seenCadence.has(o.cadence)) {
+      issues.push({ path: `options[${i}]`, problem: `second ${o.cadence} option ignored (one option per cadence)` });
+      return;
+    }
+    seenCadence.add(o.cadence);
     if (!numbers.has(o.charge_amount)) issues.push({ path: `options[${i}].charge_amount`, problem: `${o.charge_amount} does not appear in the document` });
     if (!flat.includes(squash(o.source_quote))) issues.push({ path: `options[${i}].source_quote`, problem: 'quote is not verbatim from the document' });
     let annualized: number;
@@ -112,7 +120,7 @@ export function groundExtraction(doc: string, x: ContractExtraction): { ok: bool
     if (!flat.includes(squash(r.source_quote))) issues.push({ path: `risk_clauses[${i}].source_quote`, problem: 'quote is not verbatim from the document' });
   });
   // Only price-affecting problems block the plan; an annualized mismatch is corrected by code.
-  const blocking = issues.filter((i) => !i.path.endsWith('annualized_cost'));
+  const blocking = issues.filter((i) => !i.path.endsWith('annualized_cost') && !i.problem.includes('one option per cadence'));
   return { ok: blocking.length === 0, issues, options };
 }
 
@@ -178,7 +186,11 @@ export async function parseVendorContract(doc: string): Promise<ParsedContract> 
       trace = { engine: 'offline', ms: Date.now() - t0 };
     }
   } catch (e) {
-    extraction = offlineParse(doc);
+    try {
+      extraction = offlineParse(doc);
+    } catch {
+      throw new Error(`Could not read this contract: the AI backend failed (${(e as Error).message}) and the offline parser only understands the sample order form.`);
+    }
     trace = { engine: 'offline', ms: Date.now() - t0, error: `Claude call failed, used offline parser: ${(e as Error).message}` };
   }
   const g = groundExtraction(doc, extraction);

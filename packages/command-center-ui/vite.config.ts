@@ -7,6 +7,6 @@ export default defineConfig({
   plugins: [react()],
   server: {
     port: 5173,
-    proxy: { '/api': api, '/merchant': api, '/registry': api },
+    proxy: { '/api': api, '/merchant': api, '/registry': api, '/samples': api },
   },
 });

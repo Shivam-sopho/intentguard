@@ -55,6 +55,7 @@ export class EmulatedAirwallexRail implements IssuingRail {
         this.call('POST', `/api/v1/simulation/issuing/card_transaction_lifecycles/${lifecycleId}/capture`, 'Capture (CLEARING)', body, () => this.capture(lifecycleId, body)),
       reverse: (lifecycleId, body = {}) =>
         this.call('POST', `/api/v1/simulation/issuing/card_transaction_lifecycles/${lifecycleId}/reverse`, 'Reverse authorization', body, () => this.reverse(lifecycleId)),
+      refund: (body) => this.call('POST', '/api/v1/simulation/issuing/refund', `Merchant refund ${body.transaction_amount} ${body.transaction_currency}`, body, () => this.refund(body)),
     };
   }
 
@@ -205,11 +206,27 @@ export class EmulatedAirwallexRail implements IssuingRail {
     return { process_result: 'APPROVED', type: 'CLEARING', subtype: 'CLEARING', ...this.txnBase(s, { transaction_amount: amount, transaction_currency: lc.currency, merchant_category_code: lc.mcc, merchant_info: lc.merchant }, lifecycleId) };
   }
 
+  /** Refunds credit the wallet and are always restored to the card's active limits. */
+  private refund(body: { card_id: string; transaction_amount: number; transaction_currency: string; card_transaction_lifecycle_id?: string; merchant_category_code?: string; merchant_info?: string }): SimulatedTransaction {
+    const s = this.cardState(body.card_id);
+    for (const l of s.card.authorization_controls.transaction_limits.limits) {
+      if (l.interval !== 'PER_TRANSACTION') s.spent[l.interval] = Math.max(0, (s.spent[l.interval] ?? 0) - toMinor(body.transaction_amount));
+    }
+    const wallet = this.balances.find((b) => b.currency === body.transaction_currency);
+    if (wallet) {
+      wallet.available_amount = toMajor(toMinor(wallet.available_amount) + toMinor(body.transaction_amount));
+      wallet.total_amount = toMajor(toMinor(wallet.total_amount) + toMinor(body.transaction_amount));
+    }
+    const lifecycleId = body.card_transaction_lifecycle_id ?? randomUUID();
+    return { process_result: 'APPROVED', type: 'REFUND', subtype: 'REFUND', ...this.txnBase(s, { transaction_amount: body.transaction_amount, transaction_currency: body.transaction_currency, merchant_category_code: body.merchant_category_code, merchant_info: body.merchant_info }, lifecycleId) };
+  }
+
   private reverse(lifecycleId: string): SimulatedTransaction {
     const lc = this.lifecycles.get(lifecycleId);
     if (!lc || lc.state !== 'AUTHORIZED') throw Object.assign(new Error('lifecycle not reversible'), { status: 400 });
     lc.state = 'REVERSED';
     const s = this.cardState(lc.cardId);
+    s.approvedCount = Math.max(0, s.approvedCount - 1);
     for (const l of s.card.authorization_controls.transaction_limits.limits) {
       if (l.interval !== 'PER_TRANSACTION') s.spent[l.interval] = (s.spent[l.interval] ?? 0) - toMinor(lc.amount);
     }

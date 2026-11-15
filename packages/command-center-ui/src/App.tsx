@@ -22,14 +22,15 @@ export default function App() {
   const [busySince, setBusySince] = useState<string | null>(null);
   const lastAct = useRef(0);
 
-  // Follow the run: when an act completes, show the screen with its results.
+  // Follow the run: when an act completes, show the screen with its results. Wait until the
+  // action has fully finished (busy cleared) so a half-built result screen never flashes.
   useEffect(() => {
-    if (!state) return;
+    if (!state || state.busy) return;
     if (state.act !== lastAct.current) {
       lastAct.current = state.act;
       setView(Math.max(1, state.act));
     }
-  }, [state?.act]);
+  }, [state?.act, state?.busy]);
 
   // While an action runs, show its screen with the live activity feed. If it fails,
   // return to the screen whose button started it, where the error is shown.
