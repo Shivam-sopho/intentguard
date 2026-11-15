@@ -31,7 +31,7 @@ export function VisaTapPassport({ state, onProbe }: { state: RunState | null; on
         <div className="text-ink-400">Every merchant request is signed: <span className="font-mono">agent-browser-auth</span> to browse, <span className="font-mono">agent-payer-auth</span> + agenticPaymentContainer to pay.</div>
       )}
       <div className="flex items-center justify-between gap-2 pt-0.5">
-        <span className="flex items-center gap-1 text-ink-400"><KeyRound className="h-3.5 w-3.5" /> {tap?.verifications ?? 0} signed requests this run</span>
+        <span className="flex items-center gap-1 text-ink-400"><KeyRound className="h-3.5 w-3.5" /> {tap?.verifications ?? 0} signed {tap?.verifications === 1 ? "request" : "requests"} this run</span>
         <button className="chip border-ink-600 text-ink-300 hover:border-status-critical/60 hover:text-status-critical" onClick={onProbe} disabled={!state?.rail.mode}>
           <ShieldX className="h-3 w-3" /> try unsigned bot
         </button>

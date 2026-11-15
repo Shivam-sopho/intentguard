@@ -69,6 +69,12 @@
       "caption": "Airwallex issues a virtual Visa card that can pay only that: $1,000 per charge, software stores only, US dollars only."
     },
     {
+      "id": "v10b",
+      "scene": "card-tech",
+      "say": "Under the hood, that approval is an S H A two fifty-six fingerprint of the exact terms. And every request the agent sends to the vendor is signed with its Visa Trusted Agent Protocol key.",
+      "caption": "Under the hood, that approval is a SHA-256 fingerprint of the exact terms. And every request the agent sends to the vendor is signed with its Visa Trusted Agent Protocol key."
+    },
+    {
       "id": "v11",
       "scene": "checkout",
       "say": "Now, checkout. The agent proves who it is with Visa's Trusted Agent Protocol. And the vendor's billing system quietly adds the two hundred and fifty dollar fee.",
@@ -99,10 +105,34 @@
       "caption": "The agent checks the cart matches my approval, unfreezes the card, and pays exactly $1,000. Zero unapproved spending, and the reserve stays safe."
     },
     {
+      "id": "v15b",
+      "scene": "audit",
+      "say": "Claude writes the audit note, and the week eight check-in to revisit the yearly plan is already scheduled, with a calendar invite.",
+      "caption": "Claude writes the audit note, and the week 8 check-in to revisit the yearly plan is already scheduled, with a calendar invite."
+    },
+    {
+      "id": "v15c",
+      "scene": "refund",
+      "say": "And if a payment ever needs undoing, the refund goes back through Airwallex, and the card's spending limit is restored.",
+      "caption": "And if a payment ever needs undoing, the refund goes back through Airwallex, and the card's spending limit is restored."
+    },
+    {
       "id": "v16",
       "scene": "hood",
       "say": "And every step is real. Live Airwallex API calls, signed agent requests, and a full audit trail.",
       "caption": "And every step is real: live Airwallex API calls, signed agent requests, and a full audit trail."
+    },
+    {
+      "id": "v16b",
+      "scene": "hood-states",
+      "say": "Every step moves through a state machine in code. The quarantine is right there, and illegal jumps are simply rejected.",
+      "caption": "Every step moves through a state machine in code. The quarantine is right there, and illegal jumps are simply rejected."
+    },
+    {
+      "id": "v16c",
+      "scene": "hood-identity",
+      "say": "And this is the agent's identity. The public key merchants use to verify every signed request.",
+      "caption": "And this is the agent's identity: the public key merchants use to verify every signed request."
     },
     {
       "id": "v17",

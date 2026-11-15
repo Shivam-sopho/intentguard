@@ -365,7 +365,18 @@ await say('v09', { tail: 0.2 });
 await cut(() => mainText('A card that can only pay').waitFor({ timeout: 120000 }));
 sfx('chime');
 await sleep(600);
-await say('v10', { tail: 0.5 });
+await say('v10', { tail: 0.3 });
+
+// technical details: intent fingerprint + Visa TAP credential
+{
+  const v = say('v10b', { tail: 0.3 });
+  await clickOn(page.getByRole('button', { name: /Technical details: intent fingerprint/ }));
+  await sleep(300);
+  await smoothScrollTo(page.getByText('Trusted Agent Protocol credential').first(), 'start');
+  await v;
+  await page.evaluate(() => window.scrollTo({ top: 0, behavior: 'smooth' }));
+  await sleep(600);
+}
 
 const v11 = say('v11', { tail: 0.2 });
 await sleep(5200);
@@ -394,7 +405,28 @@ await say('v14', { tail: 0.1 });
 await cut(() => mainText(/Your cash is safe/).waitFor({ timeout: 240000 }));
 sfx('success');
 await sleep(500);
-await say('v15', { tail: 0.4 });
+await say('v15', { tail: 0.3 });
+
+// audit note + scheduled re-check
+{
+  const v = say('v15b', { tail: 0.3 });
+  await sleep(300);
+  await smoothScrollTo(page.getByText(/Next: week \d+ check-in/).first(), 'start');
+  await sleep(1800);
+  await smoothScrollTo(page.getByText('Audit note').first(), 'start');
+  await v;
+}
+
+// refund through Airwallex
+{
+  const v = say('v15c', { tail: 0.3 });
+  await smoothScrollTo(page.getByText('Need to undo it?').first(), 'center');
+  await clickOn(btn(/Simulate a refund/));
+  await mainText(/Refunded \$/).waitFor({ timeout: 60000 });
+  sfx('chime');
+  await v;
+  await sleep(600);
+}
 
 await clickOn(btn(/See every API call/));
 const v16 = say('v16');
@@ -411,6 +443,16 @@ await page.evaluate(async () => {
   });
 });
 await v16;
+
+// state machine, then agent identity
+{
+  const v = say('v16b', { tail: 0.3 });
+  await clickOn(page.getByRole('button', { name: 'State machine' }));
+  await v;
+  const w = say('v16c', { tail: 0.4 });
+  await clickOn(page.getByRole('button', { name: 'Agent identity' }));
+  await w;
+}
 await page.keyboard.press('Escape');
 await page.evaluate(() => window.__ig.cursor(false));
 
