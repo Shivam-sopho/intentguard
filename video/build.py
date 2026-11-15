@@ -19,27 +19,54 @@ os.makedirs(OUT, exist_ok=True)
 SR = 48000
 FPS = 30
 
-tl = json.load(open(os.path.join(BUILD, "timeline.json")))
-frames = sorted(tl["frames"], key=lambda f: f["t"])
-events = tl["events"]
-t0 = next(e["t"] for e in events if e["type"] == "start")
-tend = next(e["t"] for e in events if e["type"] == "end")
+def load_take(path):
+    tl = json.load(open(path))
+    frames = sorted(tl["frames"], key=lambda f: f["t"])
+    events = tl["events"]
+    t0 = next(e["t"] for e in events if e["type"] == "start")
+    tend = next(e["t"] for e in events if e["type"] == "end")
+    cuts, open_cut = [], None
+    for e in events:
+        if e["type"] == "cutStart":
+            open_cut = e["t"]
+        elif e["type"] == "cutEnd" and open_cut is not None:
+            cuts.append((open_cut, e["t"]))
+            open_cut = None
+    return frames, events, t0, tend, cuts
 
-cuts = []
-open_cut = None
-for e in events:
-    if e["type"] == "cutStart":
-        open_cut = e["t"]
-    elif e["type"] == "cutEnd" and open_cut is not None:
-        cuts.append((open_cut, e["t"]))
-        open_cut = None
+
+frames, events, t0, tend, cuts = load_take(os.path.join(BUILD, "timeline.json"))
+durs = json.load(open(os.path.join(BUILD, "voice", "durations.json")))
+# voice timings the main take was recorded with (the insert may re-voice its own lines later)
+main_durs_path = os.path.join(BUILD, "main_durations.json")
+main_durs = json.load(open(main_durs_path)) if os.path.exists(main_durs_path) else durs
+
+# Optional insert take (record.mjs with INSERT=dashboard): replaces the main take's dashboard
+# section, from the black frame after the fade-out before it to the black frame after it.
+insert_path = os.path.join(BUILD, "insert", "timeline.json")
+splice = None
+holds = []  # (main-take time, seconds): freeze the frame shown at that time
+if os.path.exists(insert_path) and any(e["type"] == "voice" and e["id"] == "vD1" for e in events):
+    def voice_end(eid, tail):
+        e = next(e for e in events if e["type"] == "voice" and e["id"] == eid)
+        return e["t"] + main_durs[eid]["duration"] + tail
+    win_a = voice_end("v15c", 0.3) + 1.12  # after the 0.6 s pause and the 0.45 s fade to black
+    win_b = voice_end("vD5", 0.6) + 0.5    # after the fade to black that ends the scene
+    ins = load_take(insert_path)
+    splice = {"a": win_a, "b": win_b, "ins": ins, "len": ins[3] - ins[2]}
+    cuts = sorted(cuts + [(win_a, win_b)])
+    # Freeze on the in-app refund result ("Refunded $1,000.00 · limit back to ...") before the
+    # fade, so it is clearly visible: the live refund returned only just before the scene ended.
+    holds.append((voice_end("v15c", 0.3) + 0.5, 2.5))
 
 
 def mapped(t):
-    """Timeline position after removing the cut (waiting) intervals."""
+    """Main-take position after removing waits (and the replaced section), plus the insert length."""
     t = min(max(t, t0), tend)
     removed = sum(max(0.0, min(t, b) - a) for a, b in cuts if a < t)
-    return t - t0 - removed
+    shift = splice["len"] if splice and t >= splice["b"] else 0.0
+    shift += sum(d for h, d in holds if t >= h)
+    return t - t0 - removed + shift
 
 
 def in_cut(t):
@@ -55,7 +82,6 @@ def state_at(t):
 
 
 total = mapped(tend)
-print(f"raw {tend - t0:.1f}s, cut {sum(b - a for a, b in cuts):.1f}s in {len(cuts)} cuts, final {total:.1f}s")
 
 # ---------------------------------------------------------------- video ----
 timeline = [(0.0, state_at(t0))]
@@ -64,7 +90,33 @@ for f in frames:
         timeline.append((mapped(f["t"]), f["file"]))
 for a, b in cuts:
     timeline.append((mapped(b) + 1e-4, state_at(b)))
+for h, d in holds:
+    timeline.append((mapped(h) - d + 1e-4, state_at(h)))
+
+# events in output time: (mapped time, event, mapped caption end)
+timed = [(mapped(e["t"]), e, mapped(e["end"]) if "end" in e else None) for e in events if not in_cut(e["t"]) and t0 <= e["t"] <= tend]
+
+if splice:
+    i_frames, i_events, i_t0, i_tend, _ = splice["ins"]
+    S = mapped(splice["a"])
+    # the main take's own scene-change whoosh can land just before the window; the insert has its own
+    timed = [x for x in timed if not (x[1]["type"] == "sfx" and splice["a"] - 0.4 <= x[1]["t"] < splice["a"])]
+    ift = [f["t"] for f in i_frames]
+    def i_state(t):
+        k = bisect.bisect_right(ift, t) - 1
+        return i_frames[max(k, 0)]["file"]
+    timeline.append((S + 2e-4, i_state(i_t0)))
+    for f in i_frames:
+        if i_t0 < f["t"] <= i_tend:
+            timeline.append((S + f["t"] - i_t0, f["file"]))
+    for e in i_events:
+        if i_t0 <= e["t"] <= i_tend and e["type"] in ("voice", "sfx", "caption"):
+            timed.append((S + e["t"] - i_t0, e, (S + e["end"] - i_t0) if "end" in e else None))
+    print(f"spliced insert: {splice['len']:.1f}s at {S:.1f}s (replaced {splice['b'] - splice['a']:.1f}s)")
+
+timed.sort(key=lambda x: x[0])
 timeline.sort(key=lambda x: x[0])
+print(f"raw {tend - t0:.1f}s, final {total:.1f}s")
 dedup = []
 for tm, fl in timeline:
     if dedup and abs(tm - dedup[-1][0]) < 1e-3:
@@ -124,17 +176,17 @@ def place(buf, data, at, gain=1.0):
     buf[s:e] += data[: e - s] * gain
 
 
-for e in events:
+for tm, e, _ in timed:
     if e["type"] == "voice":
-        place(voice, load48(os.path.join(BUILD, "voice", f"{e['id']}.wav")), mapped(e["t"]), 1.0)
+        place(voice, load48(os.path.join(BUILD, "voice", f"{e['id']}.wav")), tm, 1.0)
 
 SFX_GAIN = {"click": 0.35, "whoosh": 0.45, "chime": 0.45, "alert": 0.5, "success": 0.45}
 cache = {}
-for e in events:
-    if e["type"] == "sfx" and not in_cut(e["t"]):
+for tm, e, _ in timed:
+    if e["type"] == "sfx":
         name = e["name"]
         cache.setdefault(name, load48(os.path.join(BUILD, "audio", f"sfx_{name}.wav")))
-        place(fx, cache[name], mapped(e["t"]), SFX_GAIN.get(name, 0.5))
+        place(fx, cache[name], tm, SFX_GAIN.get(name, 0.5))
 
 music = load48(os.path.join(BUILD, "audio", "music.wav"))
 if len(music) < n:
@@ -175,7 +227,7 @@ for vid, out in [(video_only, final), (video_1440, os.path.join(OUT, "intentguar
     )
 
 # ------------------------------------------------------------- captions ----
-caps = [e for e in events if e["type"] == "caption" and not in_cut(e["t"])]
+caps = [(tm, e, end) for tm, e, end in timed if e["type"] == "caption"]
 
 
 def ts(x):
@@ -184,11 +236,9 @@ def ts(x):
 
 
 with open(os.path.join(OUT, "intentguard-demo.srt"), "w") as fh:
-    for i, c in enumerate(caps):
-        start = mapped(c["t"])
-        end = mapped(c["end"])
+    for i, (start, c, end) in enumerate(caps):
         if i + 1 < len(caps):
-            end = min(end, mapped(caps[i + 1]["t"]) - 0.02)
+            end = min(end, caps[i + 1][0] - 0.02)
         fh.write(f"{i + 1}\n{ts(start)} --> {ts(max(end, start + 0.5))}\n{c['text']}\n\n")
 
 print("wrote", final)

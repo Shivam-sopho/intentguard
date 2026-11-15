@@ -12,7 +12,10 @@ import { fileURLToPath } from 'node:url';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const BUILD = path.join(HERE, 'build');
-const FRAMES = path.join(BUILD, 'frames');
+// INSERT=dashboard records only the dashboard section (no app run, so no new card) into build/insert/
+const INSERT = process.env.INSERT || '';
+const OUTDIR = INSERT ? path.join(BUILD, 'insert') : BUILD;
+const FRAMES = path.join(OUTDIR, 'frames');
 const APP = process.env.APP_URL || 'http://localhost:5173/';
 const API = process.env.API_URL || 'http://localhost:8787';
 const CHROME = process.env.CHROME || '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
@@ -265,6 +268,34 @@ const mainText = (t) => page.getByRole('main').getByText(t).first();
 const api = (p, body = {}) => fetch(API + p, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) }).then((r) => r.json());
 
 // ---------------------------------------------------------------------------
+// Insert-only take: the dashboard scene, from black to black, spliced in by build.py
+if (INSERT === 'dashboard') {
+  await page.goto('data:text/html,<html style="background:%23050608"><body style="margin:0;background:%23050608"></body></html>');
+  await screencast();
+  await sleep(400);
+  log('start');
+  await sleep(300);
+  await slide('dashboard');
+  await page.waitForFunction(() => window.__dashReady === true, null, { timeout: 20000 });
+  await sleep(500);
+  await page.evaluate(() => window.playDash());
+  await say('vD1', { tail: 0.3 });
+  await say('vD2', { tail: 0.3 });
+  await say('vD3', { tail: 0.3 });
+  await say('vD4', { tail: 0.3 });
+  await say('vD5', { tail: 0.3 });
+  await say('vD6', { tail: 0.8 });
+  await fadeOut();
+  await sleep(200);
+  log('end');
+  await cdp.send('Page.stopScreencast');
+  await sleep(300);
+  writeFileSync(path.join(OUTDIR, 'timeline.json'), JSON.stringify({ frames, events }, null, 1));
+  await browser.close();
+  console.log(`insert frames: ${frames.length}, length ${(events.at(-1).t - events[0].t).toFixed(1)}s`);
+  process.exit(0);
+}
+
 // The film
 // ---------------------------------------------------------------------------
 await api('/api/reset');
@@ -438,7 +469,8 @@ await say('vD1', { tail: 0.3 });
 await say('vD2', { tail: 0.3 });
 await say('vD3', { tail: 0.3 });
 await say('vD4', { tail: 0.3 });
-await say('vD5', { tail: 0.6 });
+await say('vD5', { tail: 0.3 });
+  await say('vD6', { tail: 0.8 });
 await fadeOut();
 await page.goto(APP);
 await mainText(/Your cash is safe/).waitFor();
@@ -485,6 +517,6 @@ log('end');
 
 await cdp.send('Page.stopScreencast');
 await sleep(300);
-writeFileSync(path.join(BUILD, 'timeline.json'), JSON.stringify({ frames, events }, null, 1));
+writeFileSync(path.join(OUTDIR, 'timeline.json'), JSON.stringify({ frames, events }, null, 1));
 await browser.close();
 console.log(`frames: ${frames.length}, events: ${events.length}, raw length ${(events.at(-1).t - events[0].t).toFixed(1)}s`);

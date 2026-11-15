@@ -29,3 +29,16 @@ python video/build.py                         # -> video/out/intentguard-demo.mp
 To change what's said, edit `script.json` (`say` is what Kokoro speaks, `caption` is what's shown), then rerun steps 2 and 3. To change pacing or what's on screen, edit the film section at the bottom of `record.mjs`.
 
 `build/` holds the raw frames (about 2.5 GB) and can be deleted after a build.
+
+## Editing without re-recording the app
+
+Every full recording creates a new card, so the app take is kept and only the dashboard section is re-recorded:
+
+```bash
+python video/dashboard.py ~/Desktop/AirwallexRecording.mov   # cut the dashboard screen recording into a timed clip
+INSERT=dashboard node video/record.mjs                       # re-record only the dashboard section (no app run)
+python video/build.py                                        # splices it into the existing take
+```
+
+`build/main_durations.json` holds the voice timings the main take was recorded with, so re-voicing dashboard lines can't shift the splice point.
+

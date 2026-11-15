@@ -119,8 +119,8 @@
     {
       "id": "vD1",
       "scene": "dashboard",
-      "say": "And this isn't a mock-up. Here's the same card, ending in eight seven five six, in the real Airwallex dashboard, with its one thousand dollar limits.",
-      "caption": "And this isn't a mock-up. Here's the same card, ending in 8756, in the real Airwallex dashboard, with its $1,000 limits."
+      "say": "And this isn't a mock-up. Here's the real Airwallex dashboard, for a card from an earlier run of this exact flow, with its one thousand dollar limits.",
+      "caption": "And this isn't a mock-up. Here's the real Airwallex dashboard, for a card from an earlier run of this exact flow, with its $1,000 limits."
     },
     {
       "id": "vD2",
@@ -143,8 +143,14 @@
     {
       "id": "vD5",
       "scene": "dashboard",
-      "say": "The one thousand dollar payment. Settled. And the refund, credited back.",
-      "caption": "The $1,000 payment: settled. And the refund: credited back."
+      "say": "The one thousand dollar payment. Settled.",
+      "caption": "The $1,000 payment: settled."
+    },
+    {
+      "id": "vD6",
+      "scene": "dashboard",
+      "say": "And here's the refund, credited back. Plus one thousand dollars, marked refunded.",
+      "caption": "And here's the refund, credited back: +$1,000, marked refunded."
     },
     {
       "id": "v16",

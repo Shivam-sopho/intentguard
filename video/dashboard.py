@@ -17,7 +17,7 @@ SRC = sys.argv[1] if len(sys.argv) > 1 else os.path.expanduser("~/Desktop/Airwal
 OUT_DIR = os.path.join(HERE, "build", "dash")
 os.makedirs(OUT_DIR, exist_ok=True)
 W, H, FPS, XF = 2080, 1076, 30, 0.3
-TAIL = {"vD1": 0.3, "vD2": 0.3, "vD3": 0.3, "vD4": 0.3, "vD5": 0.6}  # must match record.mjs
+TAIL = {"vD1": 0.3, "vD2": 0.3, "vD3": 0.3, "vD4": 0.3, "vD5": 0.3, "vD6": 0.8}  # must match record.mjs
 
 dur = json.load(open(os.path.join(HERE, "build", "voice", "durations.json")))
 line = {k: dur[k]["duration"] + TAIL[k] for k in TAIL}
@@ -34,8 +34,8 @@ segments = [
     (11.3, 14.0, LIST, line["vD2"]),
     (19.4, 20.4, TXN, line["vD3"]),
     (25.2, 26.4, TXN, line["vD4"]),
-    (29.1, 29.8, TXN, line["vD5"] / 2),
-    (35.1, 36.2, TXN, line["vD5"] / 2),
+    (29.1, 29.8, TXN, line["vD5"]),
+    (35.1, 36.2, TXN, line["vD6"]),       # the refund: +1,000.00 USD, Refunded
 ]
 
 parts = []
