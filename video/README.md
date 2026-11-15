@@ -5,11 +5,11 @@ Everything in the video is generated from this folder and recorded against the *
 | Piece | How |
 |---|---|
 | Narration | [Kokoro-82M](https://huggingface.co/hexgrad/Kokoro-82M), voice `af_heart` (`tts.py`, script in `script.json`) |
-| Picture | The real app driven in Chrome with a visible cursor, captured as 1080p frames over the Chrome DevTools screencast (`record.mjs`) |
+| Picture | The real app driven in Chrome with a visible cursor, captured as true 2560×1440 frames (a 1280×720 page at 2× pixel density) over the Chrome DevTools screencast (`record.mjs`) |
 | Slides | HTML in `slides/`, same visual language as the app |
 | Captions | Burned into the frames while recording, timed to the narration; also written as `out/intentguard-demo.srt` |
 | Music and sound cues | Synthesized from scratch, so there is nothing to license (`audio_assets.py`) |
-| Edit and mix | `build.py`: cuts the waits while Claude works, places every voice line where it was spoken, ducks the music under the voice, loudness-normalizes to −16 LUFS, encodes H.264 1080p30 |
+| Edit and mix | `build.py`: cuts the waits while Claude works, places every voice line where it was spoken, ducks the music under the voice, loudness-normalizes to −16 LUFS, and encodes H.264 at 30 fps: a 1440p master plus a 1080p version downscaled from it (BT.709, limited range) |
 
 ## Rebuild
 
@@ -23,7 +23,9 @@ python video/audio_assets.py 230
 
 # 3. record and build
 cd video && npm install && node record.mjs && cd ..
-python video/build.py                         # -> video/out/intentguard-demo.mp4 (+ .srt, thumbnail via ffmpeg)
+python video/build.py                         # -> video/out/intentguard-demo.mp4 (1080p), intentguard-demo-1440p.mp4, .srt
 ```
 
 To change what's said, edit `script.json` (`say` is what Kokoro speaks, `caption` is what's shown), then rerun steps 2 and 3. To change pacing or what's on screen, edit the film section at the bottom of `record.mjs`.
+
+`build/` holds the raw frames (about 2.5 GB) and can be deleted after a build.

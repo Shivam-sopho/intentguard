@@ -74,8 +74,15 @@ const OVERLAY = `
 // ---------------------------------------------------------------------------
 // Browser + screencast
 // ---------------------------------------------------------------------------
-const browser = await chromium.launch({ executablePath: CHROME, headless: true, args: ['--hide-scrollbars', '--force-color-profile=srgb'] });
-const ctx = await browser.newContext({ viewport: { width: 1280, height: 720 }, deviceScaleFactor: 1.5 });
+// Real 1280x720 page at 2x pixel density -> true 2560x1440 frames. (Playwright's emulated viewport
+// would make headless Chrome capture a squashed 1280x633 surface; the window includes 87px of
+// invisible browser UI, hence 807.)
+const browser = await chromium.launch({
+  executablePath: CHROME,
+  headless: true,
+  args: ['--force-device-scale-factor=2', '--window-size=1280,807', '--hide-scrollbars', '--force-color-profile=srgb'],
+});
+const ctx = await browser.newContext({ viewport: null });
 await ctx.addInitScript(OVERLAY);
 const page = await ctx.newPage();
 const cdp = await ctx.newCDPSession(page);
@@ -94,8 +101,10 @@ cdp.on('Page.screencastFrame', async ({ data, metadata, sessionId }) => {
 let casting = false;
 async function screencast() {
   if (casting) return; // the screencast survives navigations within the tab
-  await cdp.send('Page.startScreencast', { format: 'jpeg', quality: 92, maxWidth: 1920, maxHeight: 1080, everyNthFrame: 1 });
+  await cdp.send('Page.startScreencast', { format: 'jpeg', quality: 95, maxWidth: 2560, maxHeight: 1440, everyNthFrame: 1 });
   casting = true;
+  const dims = await page.evaluate(() => `${innerWidth}x${innerHeight}@${devicePixelRatio}`);
+  if (dims !== '1280x720@2') throw new Error(`unexpected capture geometry ${dims}`);
 }
 
 // ---------------------------------------------------------------------------

@@ -87,11 +87,18 @@ for k in range(n_frames):
     i = bisect.bisect_right(times, k / FPS) - 1
     os.symlink(dedup[max(i, 0)][1], os.path.join(seq, f"{k:06d}.jpg"))
 
+# Frames are 2560x1440. Encode a 1440p master and a 1080p version downscaled from it
+# (supersampled, so text stays crisp), as limited-range BT.709 for correct colour everywhere.
+X264 = ["-c:v", "libx264", "-preset", "slow", "-crf", "14", "-x264-params", "aq-mode=3",
+        "-colorspace", "bt709", "-color_primaries", "bt709", "-color_trc", "bt709", "-color_range", "tv",
+        "-r", str(FPS), "-movflags", "+faststart"]
+scale = "scale={w}:{h}:flags=lanczos+accurate_rnd+full_chroma_int:in_range=pc:out_range=tv:out_color_matrix=bt709,format=yuv420p"
+video_1440 = os.path.join(BUILD, "video_1440.mp4")
 video_only = os.path.join(BUILD, "video.mp4")
 subprocess.run(
     ["ffmpeg", "-y", "-hide_banner", "-loglevel", "error", "-framerate", str(FPS), "-i", os.path.join(seq, "%06d.jpg"),
-     "-vf", "scale=1920:1080:flags=lanczos,format=yuv420p",
-     "-c:v", "libx264", "-preset", "slow", "-crf", "16", "-r", str(FPS), "-movflags", "+faststart", video_only],
+     "-filter_complex", f"[0:v]split=2[a][b];[a]{scale.format(w=2560, h=1440)}[o1];[b]{scale.format(w=1920, h=1080)}[o2]",
+     "-map", "[o1]", *X264, video_1440, "-map", "[o2]", *X264, video_only],
     check=True,
 )
 
@@ -159,12 +166,13 @@ mix_path = os.path.join(BUILD, "mix.wav")
 sf.write(mix_path, mix, SR)
 
 final = os.path.join(OUT, "intentguard-demo.mp4")
-subprocess.run(
-    ["ffmpeg", "-y", "-hide_banner", "-loglevel", "error", "-i", video_only, "-i", mix_path,
-     "-map", "0:v", "-map", "1:a", "-c:v", "copy", "-c:a", "aac", "-b:a", "192k",
-     "-af", "loudnorm=I=-16:TP=-1.5:LRA=11", "-shortest", "-movflags", "+faststart", final],
-    check=True,
-)
+for vid, out in [(video_only, final), (video_1440, os.path.join(OUT, "intentguard-demo-1440p.mp4"))]:
+    subprocess.run(
+        ["ffmpeg", "-y", "-hide_banner", "-loglevel", "error", "-i", vid, "-i", mix_path,
+         "-map", "0:v", "-map", "1:a", "-c:v", "copy", "-c:a", "aac", "-b:a", "192k",
+         "-af", "loudnorm=I=-16:TP=-1.5:LRA=11", "-shortest", "-movflags", "+faststart", out],
+        check=True,
+    )
 
 # ------------------------------------------------------------- captions ----
 caps = [e for e in events if e["type"] == "caption" and not in_cut(e["t"])]
