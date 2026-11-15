@@ -80,7 +80,7 @@ const OVERLAY = `
 const browser = await chromium.launch({
   executablePath: CHROME,
   headless: true,
-  args: ['--force-device-scale-factor=2', '--window-size=1280,807', '--hide-scrollbars', '--force-color-profile=srgb'],
+  args: ['--force-device-scale-factor=2', '--window-size=1280,807', '--hide-scrollbars', '--force-color-profile=srgb', '--autoplay-policy=no-user-gesture-required'],
 });
 const ctx = await browser.newContext({ viewport: null });
 await ctx.addInitScript(OVERLAY);
@@ -427,6 +427,23 @@ await say('v15', { tail: 0.3 });
   await v;
   await sleep(600);
 }
+
+// --- proof: the same card in the real Airwallex dashboard (operator's screen recording) ---
+await page.evaluate(() => window.__ig.cursor(false));
+await slide('dashboard');
+await page.waitForFunction(() => window.__dashReady === true, null, { timeout: 20000 });
+await sleep(500);
+await page.evaluate(() => window.playDash());
+await say('vD1', { tail: 0.3 });
+await say('vD2', { tail: 0.3 });
+await say('vD3', { tail: 0.3 });
+await say('vD4', { tail: 0.3 });
+await say('vD5', { tail: 0.6 });
+await fadeOut();
+await page.goto(APP);
+await mainText(/Your cash is safe/).waitFor();
+await page.evaluate(() => window.__ig.cursor(true, 900, 560));
+await sleep(600);
 
 await clickOn(btn(/See every API call/));
 const v16 = say('v16');

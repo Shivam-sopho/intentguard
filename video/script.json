@@ -117,6 +117,36 @@
       "caption": "And if a payment ever needs undoing, the refund goes back through Airwallex, and the card's spending limit is restored."
     },
     {
+      "id": "vD1",
+      "scene": "dashboard",
+      "say": "And this isn't a mock-up. Here's the same card, ending in eight seven five six, in the real Airwallex dashboard, with its one thousand dollar limits.",
+      "caption": "And this isn't a mock-up. Here's the same card, ending in 8756, in the real Airwallex dashboard, with its $1,000 limits."
+    },
+    {
+      "id": "vD2",
+      "scene": "dashboard",
+      "say": "Airwallex recorded all four transactions.",
+      "caption": "Airwallex recorded all four transactions."
+    },
+    {
+      "id": "vD3",
+      "scene": "dashboard",
+      "say": "The twelve hundred and fifty dollar charge. Declined. Card's spend limit exceeded.",
+      "caption": "The $1,250 charge: declined. Card's spend limit exceeded."
+    },
+    {
+      "id": "vD4",
+      "scene": "dashboard",
+      "say": "The two hundred and fifty dollar retry. Declined. The card was frozen.",
+      "caption": "The $250 retry: declined. The card was frozen."
+    },
+    {
+      "id": "vD5",
+      "scene": "dashboard",
+      "say": "The one thousand dollar payment. Settled. And the refund, credited back.",
+      "caption": "The $1,000 payment: settled. And the refund: credited back."
+    },
+    {
       "id": "v16",
       "scene": "hood",
       "say": "And every step is real. Live Airwallex API calls, signed agent requests, and a full audit trail.",

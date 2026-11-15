@@ -1,0 +1,33 @@
+<!doctype html><html><head><meta charset="utf-8"><link rel="stylesheet" href="slides.css">
+<style>
+  .dash { position:relative; z-index:1; height:100%; display:flex; flex-direction:column; align-items:center; padding-top:20px; }
+  .top { width:1000px; display:flex; align-items:center; justify-content:space-between; }
+  .eyebrow2 { font-size:13px; font-weight:700; letter-spacing:.2em; text-transform:uppercase; color:var(--flame); }
+  .live { display:inline-flex; align-items:center; gap:7px; font-size:12px; font-weight:600; color:#22b07d; border:1px solid rgba(34,176,125,.45); border-radius:999px; padding:4px 11px; }
+  .live i { width:7px; height:7px; border-radius:50%; background:#22b07d; box-shadow:0 0 10px #22b07d; }
+  .win { width:1000px; margin-top:12px; border-radius:14px; overflow:hidden; background:#16171c; border:1px solid #2c2d35; box-shadow:0 30px 80px rgba(0,0,0,.6); }
+  .bar { height:34px; display:flex; align-items:center; gap:8px; padding:0 12px; background:#1d1e24; border-bottom:1px solid #2c2d35; }
+  .dot { width:10px; height:10px; border-radius:50%; background:#3a3b44; }
+  .url { margin-left:10px; flex:1; height:22px; border-radius:7px; background:#121318; display:flex; align-items:center; gap:7px; padding:0 10px; font:500 12px Inter, sans-serif; color:#a3a4ad; white-space:nowrap; overflow:hidden; }
+  .url b { color:#ecedf1; font-weight:500; }
+  video { display:block; width:1000px; height:517px; background:#fff; }
+</style></head><body>
+<div class="dash">
+  <div class="top up" style="animation-delay:.1s">
+    <div class="eyebrow2">Proof · the real Airwallex dashboard</div>
+    <span class="live"><i></i> Airwallex sandbox · card •••• 8756</span>
+  </div>
+  <div class="win up" style="animation-delay:.25s">
+    <div class="bar"><span class="dot"></span><span class="dot"></span><span class="dot"></span>
+      <div class="url"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#7a7b85" stroke-width="2.4"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg><b>sandbox.airwallex.com</b>/app/cards/card-details/9205a1e8-c477-4761-bdd1-a80b7a961443</div>
+    </div>
+    <video id="v" src="../build/dash/dashboard-clip.mp4" muted playsinline preload="auto"></video>
+  </div>
+</div>
+<script>
+  const v = document.getElementById('v');
+  Object.defineProperty(window, '__dashReady', { get: () => v.readyState >= 3 });
+  v.addEventListener('error', () => { window.__dashError = String(v.error && v.error.code); });
+  window.playDash = () => { v.currentTime = 0; return v.play(); };
+</script>
+</body></html>

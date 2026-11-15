@@ -23,8 +23,18 @@ pipe = KPipeline(lang_code="a", repo_id="hexgrad/Kokoro-82M")
 SR = 24000
 PAUSE = np.zeros(int(SR * 0.12), dtype=np.float32)  # breath between Kokoro segments
 
+import hashlib
+
+prev_meta_path = os.path.join(OUT, "durations.json")
+prev = json.load(open(prev_meta_path)) if os.path.exists(prev_meta_path) else {}
 meta = {}
 for line in script["lines"]:
+    key = hashlib.sha256(f"{script['voice']}|{script['speed']}|{line['say']}".encode()).hexdigest()[:16]
+    wav = os.path.join(OUT, f"{line['id']}.wav")
+    old = prev.get(line["id"])
+    if old and old.get("key") == key and os.path.exists(wav):
+        meta[line["id"]] = old  # unchanged text: keep the exact audio already used in recordings
+        continue
     parts = []
     segments = []  # (start_s, end_s, spoken text) per Kokoro segment
     t = 0.0
@@ -39,7 +49,7 @@ for line in script["lines"]:
     audio[:f] *= np.linspace(0, 1, f)
     audio[-f:] *= np.linspace(1, 0, f)
     sf.write(os.path.join(OUT, f"{line['id']}.wav"), audio, SR)
-    meta[line["id"]] = {"duration": round(len(audio) / SR, 3), "segments": segments}
+    meta[line["id"]] = {"duration": round(len(audio) / SR, 3), "segments": segments, "key": key}
     print(f"{line['id']}  {len(audio) / SR:5.2f}s  {line['say'][:60]}")
 
 json.dump(meta, open(os.path.join(OUT, "durations.json"), "w"), indent=1)
