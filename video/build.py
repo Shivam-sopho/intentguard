@@ -121,7 +121,7 @@ for e in events:
     if e["type"] == "voice":
         place(voice, load48(os.path.join(BUILD, "voice", f"{e['id']}.wav")), mapped(e["t"]), 1.0)
 
-SFX_GAIN = {"click": 0.45, "whoosh": 0.55, "chime": 0.5, "alert": 0.55, "success": 0.5}
+SFX_GAIN = {"click": 0.35, "whoosh": 0.45, "chime": 0.45, "alert": 0.5, "success": 0.45}
 cache = {}
 for e in events:
     if e["type"] == "sfx" and not in_cut(e["t"]):

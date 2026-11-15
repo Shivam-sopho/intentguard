@@ -16,11 +16,23 @@ export function ContractPanel({ state }: { state: RunState | null }) {
   }
   const x = c.parsed.extraction;
   const g = c.parsed.grounding;
+  /**
+   * Highlight every quote Claude cited, tolerating PDF line wraps: whitespace in a quote matches
+   * any run of whitespace, and a hyphen may be followed by a line break ("12-\nmonth").
+   */
   const highlight = (doc: string) => {
-    const quotes = [...x.options.map((o) => o.source_quote), ...x.risk_clauses.map((r) => r.source_quote)].filter((q) => q && doc.includes(q));
+    const quotes = [...x.options.map((o) => o.source_quote), ...x.risk_clauses.map((r) => r.source_quote)].filter((q) => q && q.trim().length > 3);
     if (!quotes.length) return doc;
-    const re = new RegExp(`(${quotes.map((q) => q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|')})`, 'g');
-    return doc.split(re).map((part, i) => (quotes.includes(part) ? <mark key={i} className="rounded bg-flame-500/20 px-0.5 text-flame-400">{part}</mark> : part));
+    const pattern = (q: string) =>
+      q
+        .trim()
+        .replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+        .replace(/[\u2018\u2019']/g, "['\u2018\u2019]")
+        .replace(/-\s*/g, '-\\s*')
+        .replace(/\s+/g, '\\s+');
+    const re = new RegExp(`(${quotes.map(pattern).join('|')})`, 'gi');
+    const parts = doc.split(re);
+    return parts.map((part, i) => (i % 2 === 1 ? <mark key={i} className="rounded bg-flame-500/25 px-0.5 text-flame-400">{part}</mark> : part));
   };
   return (
     <div className="space-y-3 p-3">
@@ -36,7 +48,7 @@ export function ContractPanel({ state }: { state: RunState | null }) {
         </button>
       </div>
 
-      {showDoc && <pre className="max-h-56 overflow-auto whitespace-pre-wrap rounded-lg border border-ink-700 bg-ink-950 p-3 font-mono text-[11px] leading-relaxed text-ink-300 scrollbar-thin">{highlight(c.document)}</pre>}
+      {showDoc && <pre className="max-h-80 overflow-auto whitespace-pre-wrap rounded-lg border border-ink-700 bg-ink-950 p-3 font-mono text-[12.5px] leading-relaxed text-ink-200 scrollbar-thin">{highlight(c.document)}</pre>}
 
       <div className="grid grid-cols-2 gap-2">
         {x.options.map((o) => (

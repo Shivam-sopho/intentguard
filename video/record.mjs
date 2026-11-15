@@ -16,7 +16,6 @@ const FRAMES = path.join(BUILD, 'frames');
 const APP = process.env.APP_URL || 'http://localhost:5173/';
 const API = process.env.API_URL || 'http://localhost:8787';
 const CHROME = process.env.CHROME || '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
-const SAMPLE_PDF = path.resolve(HERE, '../samples/cloudscale-order-form.pdf');
 
 const script = JSON.parse(readFileSync(path.join(HERE, 'script.json'), 'utf8'));
 const durations = JSON.parse(readFileSync(path.join(BUILD, 'voice', 'durations.json'), 'utf8'));
@@ -130,7 +129,8 @@ async function say(id, { tail = 0.35 } = {}) {
  * sentence is split once, at the clause boundary closest to its middle.
  */
 function chunkCaption(text) {
-  const sentences = text.match(/[^.!?]+[.!?]+["”']?|\S[^.!?]*$/g)?.map((s) => s.trim()) ?? [text];
+  // sentence = punctuation followed by whitespace, so "4.5" or "$1,000.00" never splits
+  const sentences = text.split(/(?<=[.!?]["”']?)\s+/).map((s) => s.trim()).filter(Boolean);
   const out = [];
   const split = (s) => {
     if (s.length <= 90) return [s];
@@ -150,6 +150,61 @@ function chunkCaption(text) {
 }
 
 const sfx = (name) => log('sfx', { name });
+
+/** Seconds into a narration line at which a phrase is spoken (by its position in the text). */
+function atPhrase(id, phrase) {
+  const text = lines[id].say;
+  const i = text.indexOf(phrase);
+  return i < 0 ? 0 : (i / text.length) * durations[id].duration;
+}
+
+/**
+ * Show a PDF "file" being dragged by the cursor into the app's drop zone, then dispatch a
+ * real drop event carrying the actual sample PDF, so the app's normal upload path runs.
+ */
+async function dragPdfIntoDropZone() {
+  const zone = page.locator('div.border-dashed').first();
+  await zone.scrollIntoViewIfNeeded();
+  const box = await zone.boundingBox();
+  const start = { x: 150, y: 600 };
+  await page.evaluate(({ x, y }) => {
+    const chip = document.createElement('div');
+    chip.id = 'ig-file';
+    chip.innerHTML = '<span style="background:#d03b3b;color:#fff;font:800 10px Inter,sans-serif;border-radius:4px;padding:3px 5px;letter-spacing:.04em">PDF</span><span>cloudscale-order-form.pdf</span>';
+    Object.assign(chip.style, {
+      position: 'fixed', left: '0', top: '0', zIndex: 2147483646, display: 'flex', alignItems: 'center', gap: '8px',
+      padding: '9px 13px', borderRadius: '10px', background: '#1a1b21', border: '1px solid #4a4b55', color: '#ecedf1',
+      font: '500 14px Inter, sans-serif', boxShadow: '0 14px 34px rgba(0,0,0,.55)', opacity: '0',
+      transform: `translate(${x}px, ${y}px)`, transition: 'transform .9s cubic-bezier(.22,.8,.25,1), opacity .3s',
+    });
+    document.documentElement.appendChild(chip);
+    requestAnimationFrame(() => (chip.style.opacity = '1'));
+  }, start);
+  await page.evaluate(({ x, y }) => window.__ig.cursor(true, x + 30, y + 14), start);
+  await sleep(900);
+  sfx('click');
+  const target = { x: box.x + box.width / 2 - 110, y: box.y + box.height / 2 - 18 };
+  await page.evaluate(({ x, y }) => {
+    document.getElementById('ig-file').style.transform = `translate(${x}px, ${y}px) rotate(-2deg)`;
+    window.__ig.cursor(true, x + 30, y + 14);
+  }, target);
+  await sleep(500);
+  await zone.dispatchEvent('dragover', {});
+  await sleep(600);
+  await page.evaluate(async () => {
+    const blob = await (await fetch('/samples/cloudscale-order-form.pdf')).blob();
+    const file = new File([blob], 'cloudscale-order-form.pdf', { type: 'application/pdf' });
+    const dt = new DataTransfer();
+    dt.items.add(file);
+    const zone = document.querySelector('div.border-dashed');
+    zone.dispatchEvent(new DragEvent('drop', { bubbles: true, cancelable: true, dataTransfer: dt }));
+    const chip = document.getElementById('ig-file');
+    chip.style.transition = 'opacity .35s, transform .35s';
+    chip.style.opacity = '0';
+    chip.style.transform += ' scale(.85)';
+    setTimeout(() => chip.remove(), 400);
+  });
+}
 
 async function cursorTo(locator) {
   await locator.scrollIntoViewIfNeeded().catch(() => {});
@@ -236,17 +291,33 @@ await clickOn(btn(/Connect & set the rules/));
 await mainText('Your rules are set').waitFor({ timeout: 60000 });
 await v04;
 
-const v05 = say('v05', { tail: 0.2 });
-await sleep(1200);
+// --- the contract itself, before it goes into the app ---
+await page.evaluate(() => window.__ig.cursor(false));
+await slide('contract');
+await sleep(700);
+{
+  const v = say('v05a', { tail: 0.6 });
+  const marks = [['Nine thousand', 'annual'], ['or one thousand', 'monthly'], ['clause four point five', 'fee']];
+  for (const [phrase, key] of marks) {
+    setTimeout(() => page.evaluate((k) => window.mark?.(k), key).catch(() => {}), atPhrase('v05a', phrase) * 1000);
+  }
+  await v;
+}
+
+// --- back to the app: drag the PDF into the drop zone (a real drop event) ---
+await fadeOut();
+await page.goto(APP);
+await mainText('Your rules are set').waitFor();
+await page.evaluate(() => window.__ig.cursor(true, 760, 520));
+await sleep(500);
 await clickOn(btn(/Next: the vendor/));
 await mainText("Upload the vendor's offer").waitFor();
-await sleep(700);
-const chooser = page.waitForEvent('filechooser');
-await clickOn(btn(/Choose a file/));
-await (await chooser).setFiles(SAMPLE_PDF);
-await mainText(/cloudscale-order-form\.pdf/).waitFor({ timeout: 60000 });
-await v05;
 await sleep(500);
+const v05b = say('v05b', { tail: 0.3 });
+await dragPdfIntoDropZone();
+await mainText(/cloudscale-order-form\.pdf/).waitFor({ timeout: 60000 });
+await v05b;
+await sleep(900);
 
 await clickOn(btn(/Read the contract/));
 await say('v06', { tail: 0.2 });
@@ -258,8 +329,24 @@ await sleep(2800);
 await smoothScrollTo(page.getByText('Your cash over the next 8 weeks').first(), 'start');
 await v07;
 const v08 = say('v08');
-await sleep(800);
-await smoothScrollTo(page.getByText(/Watch out: clause/).first());
+await clickOn(page.getByRole('button', { name: /See the contract and what Claude extracted/ }));
+await sleep(400);
+await clickOn(page.getByRole('button', { name: /view order form/ }));
+await sleep(300);
+// bring the document near the top, then scroll inside it so every highlight passes by
+await page.locator('pre').first().evaluate((el) => {
+  const top = el.getBoundingClientRect().top + window.scrollY - 120;
+  window.scrollTo({ top, behavior: 'smooth' });
+});
+await sleep(1000);
+await page.locator('pre').first().evaluate(async (el) => {
+  const end = el.scrollHeight - el.clientHeight;
+  const t0 = performance.now();
+  await new Promise((res) => {
+    const step = (t) => { const p = Math.min(1, (t - t0) / 5200); el.scrollTop = end * (0.5 - Math.cos(Math.PI * p) / 2); p < 1 ? requestAnimationFrame(step) : res(); };
+    requestAnimationFrame(step);
+  });
+});
 await v08;
 await page.evaluate(() => window.scrollTo({ top: 0, behavior: 'smooth' }));
 await sleep(700);

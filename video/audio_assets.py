@@ -106,48 +106,58 @@ def stereo(x):
     return np.stack([x, x], axis=1)
 
 
+def soft_tone(freqs, dur, attack, decay, gain):
+    """Warm, rounded tone: sine partials, slow attack, exponential decay (no sharp transients)."""
+    n = int(dur * SR)
+    t = np.arange(n) / SR
+    x = sum(np.sin(2 * np.pi * f * t) * (0.45 ** i) for i, f in enumerate(freqs))
+    a = max(1, int(attack * SR))
+    e = env_exp(n, decay)
+    e[:a] *= np.sin(np.linspace(0, np.pi / 2, a)) ** 2
+    return (x * e * gain).astype(np.float32)
+
+
+def lowpass_fast(x, cutoff):
+    """One-pole low-pass applied twice (vectorized via cumulative filter over blocks is overkill here)."""
+    return one_pole_lowpass(one_pole_lowpass(x, cutoff), cutoff)
+
+
 def sfx():
+    """Gentle UI cues. Everything is kept below ~1.2 kHz with soft attacks so nothing is piercing."""
     out = {}
-    # soft UI click
-    n = int(0.05 * SR)
-    click = rng.standard_normal(n) * env_exp(n, 0.006)
-    out["click"] = stereo(one_pole_lowpass(click, 2500) * 0.25)
-    # whoosh for slide transitions: noise with rising then falling filter
-    n = int(0.9 * SR)
+    # click: a muted, low "tick" (mostly ~300-700 Hz)
+    n = int(0.06 * SR)
+    click = rng.standard_normal(n) * env_exp(n, 0.008)
+    click = lowpass_fast(click, 900)
+    out["click"] = stereo(click / (np.max(np.abs(click)) + 1e-9) * 0.12)
+    # transition: soft low "air swell" (low-passed noise, slow rise and fall, no hiss)
+    n = int(1.1 * SR)
     noise = rng.standard_normal(n)
-    shaped = np.zeros(n)
-    acc = 0.0
-    for i in range(n):
-        p = i / n
-        cutoff = 200 + 2200 * np.sin(np.pi * p) ** 2
-        a = np.exp(-2 * np.pi * cutoff / SR)
-        acc = (1 - a) * noise[i] + a * acc
-        shaped[i] = acc
-    shaped *= np.sin(np.linspace(0, np.pi, n)) ** 2
-    out["whoosh"] = stereo(shaped / (np.max(np.abs(shaped)) + 1e-9) * 0.22)
-    # card issued: bright two-note chime
-    a = tone([midi(84), midi(96)], 1.2, 0.35, 0.28)
-    b = tone([midi(91), midi(103)], 1.2, 0.4, 0.24)
-    ch = np.zeros(int(1.4 * SR), dtype=np.float32)
+    swell = lowpass_fast(noise, 420)
+    swell *= np.sin(np.linspace(0, np.pi, n)) ** 3
+    out["whoosh"] = stereo(swell / (np.max(np.abs(swell)) + 1e-9) * 0.10)
+    # card issued: mellow two-note marimba-like tone (C5 + G5, soft attack)
+    a = soft_tone([midi(72), midi(84)], 1.4, 0.012, 0.32, 0.20)
+    b = soft_tone([midi(79), midi(91)], 1.4, 0.012, 0.36, 0.16)
+    ch = np.zeros(int(1.6 * SR), dtype=np.float32)
     ch[: len(a)] += a
-    off = int(0.12 * SR)
+    off = int(0.14 * SR)
     ch[off : off + len(b)] += b[: len(ch) - off]
-    out["chime"] = stereo(ch)
-    # blocked: low, soft double pulse
-    p1 = tone([midi(45), midi(57)], 0.7, 0.18, 0.5)
-    al = np.zeros(int(1.0 * SR), dtype=np.float32)
+    out["chime"] = stereo(lowpass_fast(ch, 1600))
+    # blocked: low, soft double pulse (A2 + A3)
+    p1 = soft_tone([midi(45), midi(57)], 0.8, 0.02, 0.2, 0.42)
+    al = np.zeros(int(1.1 * SR), dtype=np.float32)
     al[: len(p1)] += p1
-    off = int(0.22 * SR)
-    al[off : off + len(p1)] += p1[: len(al) - off] * 0.8
+    off = int(0.24 * SR)
+    al[off : off + len(p1)] += p1[: len(al) - off] * 0.75
     out["alert"] = stereo(al)
-    # success: rising arpeggio
-    notes = [72, 76, 79, 84]
-    su = np.zeros(int(1.8 * SR), dtype=np.float32)
-    for i, nn in enumerate(notes):
-        tt = tone([midi(nn), midi(nn + 12)], 1.2, 0.45, 0.22)
-        o = int(i * 0.09 * SR)
+    # success: slow, warm rising arpeggio in the middle register (C4 E4 G4 C5)
+    su = np.zeros(int(2.2 * SR), dtype=np.float32)
+    for i, nn in enumerate([60, 64, 67, 72]):
+        tt = soft_tone([midi(nn), midi(nn + 12)], 1.5, 0.02, 0.5, 0.16)
+        o = int(i * 0.12 * SR)
         su[o : o + len(tt)] += tt[: len(su) - o]
-    out["success"] = stereo(su)
+    out["success"] = stereo(lowpass_fast(su, 1800))
     return out
 
 

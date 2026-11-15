@@ -1,0 +1,55 @@
+<!doctype html><html><head><meta charset="utf-8"><link rel="stylesheet" href="slides.css">
+<style>
+.paper { font-family: Helvetica, Arial, sans-serif; color: #1b1b1f; font-size: 11pt; line-height: 1.45; }
+.paper .head{ display:flex; justify-content:space-between; align-items:flex-start; border-bottom: 2px solid #1b1b1f; padding-bottom: 10px; margin-bottom: 18px; }
+.paper .brand{ font-size: 20pt; font-weight: 700; letter-spacing: -0.5px; }
+.paper .meta{ text-align:right; font-size: 9.5pt; color:#55555c; }
+.paper h2{ font-size: 12pt; margin: 18px 0 6px; text-transform: uppercase; letter-spacing: .5px; }
+.paper table{ width:100%; border-collapse: collapse; margin: 6px 0 4px; }
+.paper td, .paper th{ border: 1px solid #c9c9cf; padding: 7px 9px; text-align:left; vertical-align: top; font-size: 10.5pt; }
+.paper th{ background:#f1f1f4; }
+.paper .small{ font-size: 9.5pt; color:#55555c; }
+.paper .sig{ margin-top: 26px; display:flex; gap: 40px; }
+.paper .sig div{ flex:1; border-top:1px solid #999; padding-top:4px; font-size:9.5pt; color:#55555c; }
+.paper { font-family: Helvetica, Arial, sans-serif; color:#1b1b1f; font-size: 11pt; line-height:1.45; background:#fff; width: 720px; padding: 38px 44px 30px;
+  border-radius: 6px; box-shadow: 0 30px 80px rgba(0,0,0,.55), 0 0 0 1px rgba(255,255,255,.06); transform-origin: top left; }
+.paper .hl { border-radius: 4px; transition: background .5s ease, box-shadow .5s ease; padding: 0 2px; margin: 0 -2px; }
+.paper .hl.on { background: rgba(255,106,31,.22); box-shadow: 0 0 0 2px rgba(255,106,31,.75); }
+.paper div.hl { display:block; padding: 4px 8px; margin: 4px -8px; }
+.wrap { display:flex; gap: 56px; align-items:flex-start; margin-top: 34px; }
+.paperbox { position:relative; width: 490px; height: 690px; }
+.paperbox .paper { position:absolute; left:0; top:0; transform: scale(.68); }
+.file { position:absolute; top:-18px; left: 22px; z-index:3; display:flex; align-items:center; gap:10px; background:#1a1b21; border:1px solid #33343d; border-radius: 12px; padding: 9px 14px; font-size:15px; box-shadow: 0 10px 30px rgba(0,0,0,.5); }
+.file .pdf { background:#d03b3b; color:#fff; font-weight:800; font-size:11px; border-radius:5px; padding:4px 6px; letter-spacing:.04em; }
+.callouts { flex:1; display:flex; flex-direction:column; gap:16px; padding-top: 20px; max-width: 640px; }
+.co { opacity:.18; transform: translateX(14px); transition: opacity .6s ease, transform .6s ease; border:1px solid var(--line); border-radius:18px; padding:18px 22px; background:rgba(20,21,26,.85); }
+.co.on { opacity:1; transform:none; border-color: rgba(255,106,31,.55); }
+.co .k { font-size:13px; letter-spacing:.14em; text-transform:uppercase; color:var(--dim); font-weight:700; }
+.co .v { font-family:'JetBrains Mono', monospace; font-size:28px; font-weight:500; margin-top:6px; }
+.co .d { font-size:16px; color:var(--muted); margin-top:4px; }
+</style></head><body>
+<div class="stage" style="justify-content:flex-start;padding-top:46px;padding-bottom:0">
+  <div class="eyebrow up" style="animation-delay:.2s">The vendor's contract · what the agent has to read</div>
+  <div class="wrap">
+    <div class="paperbox up" style="animation-delay:.6s">
+      <div class="file"><span class="pdf">PDF</span> cloudscale-order-form.pdf <span style="color:var(--dim)">· 1 page</span></div>
+      <div class="paper"><div class="head"><div class="brand">CloudScale Inc.</div><div class="meta">ORDER FORM Q-2026-1187<br>Issued 14 November 2026<br>Valid for 30 days</div></div>
+<p><b>Customer:</b> Acme Robotics Pty Ltd - Procurement<br><b>Product:</b> CloudScale Enterprise APM (SKU CS-APM-ENT-10), 10 seats<br><b>Merchant category:</b> Computer software (MCC 5734)</p>
+<h2>Pricing options (USD, exclusive of tax)</h2>
+<table><tr><th>Option</th><th>Price</th><th>Billing</th></tr><tr><td><b>Option A - Annual Upfront</b></td><td><span class="hl" id="hl-annual">USD 9,600.00 billed immediately for a 12-month term</span></td><td>20% discount versus the monthly list price (USD 12,000.00 per year). Annual fees are non-refundable once invoiced.</td></tr><tr><td><b>Option B - Monthly Flexible</b></td><td><span class="hl" id="hl-monthly">USD 1,000.00 per month</span></td><td>Billed monthly in advance. Cancel any time with 30 days' written notice.</td></tr></table>
+<p class="small">Prices cover 10 named seats. Additional seats are pro-rated.</p>
+<h2>Terms of service (excerpt)</h2><p><b>4.2 Renewal.</b> Annual subscriptions renew automatically for successive 12-month terms at then-current list price unless cancelled 60 days before the renewal date.</p><div class="hl" id="hl-fee"><p><b>4.5 Onboarding.</b> CloudScale may charge a one-time Enterprise Onboarding Fee of up to USD 250.00 where professional onboarding services are provisioned.</p></div><p><b>4.7 Seat minimum.</b> Enterprise plans require a minimum of 10 seats.</p><p><b>7.1 Price changes.</b> Monthly prices may change on 30 days' notice.</p>
+<div class="sig"><div>Signed for CloudScale Inc.</div><div>Signed for the Customer</div></div>
+</div>
+    </div>
+    <div class="callouts">
+      <div class="co" id="co-annual"><div class="k">Option A · pay yearly</div><div class="v">$9,600 upfront</div><div class="d">20% cheaper than monthly · non-refundable</div></div>
+      <div class="co" id="co-monthly"><div class="k">Option B · pay monthly</div><div class="v">$1,000 / month</div><div class="d">cancel any time</div></div>
+      <div class="co" id="co-fee" style="--line:#5a3a1a"><div class="k" style="color:#eda100">Fine print · clause 4.5</div><div class="v" style="color:#eda100">fee up to $250</div><div class="d">"may charge a one-time Enterprise Onboarding Fee"</div></div>
+    </div>
+  </div>
+</div>
+<script>
+  window.mark = (k) => { document.getElementById('hl-' + k)?.classList.add('on'); document.getElementById('co-' + k)?.classList.add('on'); };
+</script>
+</body></html>
