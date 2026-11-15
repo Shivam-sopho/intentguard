@@ -46,6 +46,24 @@ function ErrorNote({ state }: { state: RunState }) {
   return <div className="rounded-xl border border-status-critical/50 bg-status-critical/10 px-4 py-3 text-[13px] text-status-critical">{state.error}</div>;
 }
 
+/** Shown instead of a blank page when a step's data doesn't exist (e.g. a failed action). */
+function NotReady({ p, step, title, back, backLabel }: { p: ScreenProps; step: number; title: string; back: number; backLabel: string }) {
+  return (
+    <Screen
+      step={step}
+      title={title}
+      subtitle={p.state.error ? 'The previous step did not finish. Here is what went wrong:' : 'Finish the previous step first.'}
+      actions={
+        <button className="btn-primary px-5 py-2.5 text-[15px]" onClick={() => p.goTo(back)}>
+          {backLabel}
+        </button>
+      }
+    >
+      <ErrorNote state={p.state} />
+    </Screen>
+  );
+}
+
 // ---------------------------------------------------------------------------
 // Step 1 - Set the rules
 // ---------------------------------------------------------------------------
@@ -303,7 +321,7 @@ export function CardScreen(p: ScreenProps) {
     );
   }
   const c = state.card;
-  if (!c || !state.intent) return null;
+  if (!c || !state.intent) return <NotReady p={p} step={3} title="No card yet" back={2} backLabel="Back to approval" />;
   const ctrl = c.card.authorization_controls;
   const per = c.limits.limits.find((l) => l.interval === 'PER_TRANSACTION');
   const monthly = c.limits.limits.find((l) => l.interval === 'MONTHLY');
@@ -379,7 +397,7 @@ export function BlockedScreen(p: ScreenProps) {
     );
   }
   const inc = state.incident;
-  if (!inc || !state.intent) return null;
+  if (!inc || !state.intent) return <NotReady p={p} step={4} title="Checkout hasn't run yet" back={3} backLabel="Back to the card" />;
   const attempted = inc.attemptedAmount;
   const approved = state.intent.intent.billing.amount;
   const fee = inc.verification.unapprovedLineItems[0];
@@ -453,7 +471,7 @@ function Layer({ icon, title, body }: { icon: React.ReactNode; title: string; bo
 export function PaidScreen(p: ScreenProps) {
   const { state } = p;
   const s = state.settlement;
-  if (!s || !state.intent) return null;
+  if (!s || !state.intent) return <NotReady p={p} step={5} title="Not paid yet" back={4} backLabel="Back" />;
   const d = state.plan!.decision;
   const chosen = d.verdicts.find((v) => v.optionId === d.recommendedOptionId);
   const trig = state.triggers[0];

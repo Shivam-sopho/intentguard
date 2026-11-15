@@ -31,13 +31,18 @@ export default function App() {
     }
   }, [state?.act]);
 
-  // While an action runs, show its screen with the live activity feed.
+  // While an action runs, show its screen with the live activity feed. If it fails,
+  // return to the screen whose button started it, where the error is shown.
   const busyScreen = screenForBusy(state?.busy);
+  const prevBusy = useRef<number | null>(null);
   useEffect(() => {
     if (busyScreen) {
       setView(busyScreen);
       setBusySince(new Date(Date.now() - 1000).toISOString());
+    } else if (prevBusy.current && state?.error) {
+      setView(Math.max(1, state.act));
     }
+    prevBusy.current = busyScreen;
   }, [busyScreen]);
 
   useScrollTop(view);

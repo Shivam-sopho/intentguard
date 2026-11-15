@@ -412,16 +412,34 @@ export class Orchestrator {
     return this.run('Act 3: approval + card provisioning', async () => {
       if (this.state.act !== 2 || !this.state.intent) throw new Error('Run Act 2 first');
       const { intent, intentHash: hash } = this.state.intent;
-      const approval = signApproval(hash, approver, this.operatorKey, `${formatMoney(intent.billing.amount)} ${intent.billing.cadence} to ${intent.merchant.name}`);
-      const verified = verifyApproval(approval, intent, this.operatorKey.publicKey);
-      this.state.approval = { ...approval, verified };
-      this.t('OPERATOR', `Approved intent ${hash.slice(0, 16)}… (Ed25519 signature ${verified ? 'valid' : 'INVALID'})`, verified ? 'success' : 'error', approval);
-      this.transition('APPROVED', { approvalSignatureValid: verified });
+      // Retry-safe: if a previous attempt already signed the approval but card issuance
+      // failed, reuse that signed approval and only retry provisioning.
+      if (this.machine.state === 'APPROVED' && this.state.approval?.verified && this.state.approval.intentHash === hash) {
+        this.t('ENGINE', 'Retrying card provisioning with the existing signed approval', 'info');
+      } else {
+        const approval = signApproval(hash, approver, this.operatorKey, `${formatMoney(intent.billing.amount)} ${intent.billing.cadence} to ${intent.merchant.name}`);
+        const verified = verifyApproval(approval, intent, this.operatorKey.publicKey);
+        this.state.approval = { ...approval, verified };
+        this.t('OPERATOR', `Approved intent ${hash.slice(0, 16)}… (Ed25519 signature ${verified ? 'valid' : 'INVALID'})`, verified ? 'success' : 'error', approval);
+        this.transition('APPROVED', { approvalSignatureValid: verified });
+      }
 
       const cardholderId = await this.ensureCardholder();
       const payload = buildCardCreatePayload(intent, cardholderId, hash, { createdBy: 'IntentGuard Procurement Agent', activeDays: 35 });
       this.t('ENGINE', 'Built card policy: inclusive PER_TRANSACTION + MONTHLY limit, MCC + currency allowlist', 'info', payload.authorization_controls);
-      let card = await this.rail.createCard(payload);
+      let card: Card;
+      try {
+        card = await this.rail.createCard(payload);
+      } catch (e) {
+        const msg = (e as Error).message;
+        if (this.rail.mode === 'LIVE' && /Invalid issuance details|not allowed to set/.test(msg)) {
+          throw new Error(
+            'Airwallex declined to create the virtual card: card issuing is not enabled for this sandbox account yet ("Invalid issuance details"). ' +
+              'Ask the Airwallex team to enable it, or set AIRWALLEX_MODE=emulator in .env and restart to continue the demo.',
+          );
+        }
+        throw e;
+      }
       for (let i = 0; i < 10 && card.card_status === 'PENDING'; i++) {
         await new Promise((r) => setTimeout(r, 800));
         card = await this.rail.getCard(card.card_id);
