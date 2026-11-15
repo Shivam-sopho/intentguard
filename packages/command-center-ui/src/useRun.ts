@@ -41,7 +41,7 @@ export function useRun() {
   const runFullDemo = useCallback(
     async (opts: { reserveFloor?: number; pauseMs?: number } = {}) => {
       const pause = (ms: number) => new Promise((r) => setTimeout(r, ms));
-      const p = opts.pauseMs ?? 2600;
+      const p = opts.pauseMs ?? 3500;
       demoAbort.current = false;
       setDemoRunning(true);
       try {

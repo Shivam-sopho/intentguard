@@ -2,7 +2,7 @@ import { Lock, Snowflake, CheckCircle2, CreditCard } from 'lucide-react';
 import type { RunState } from '../types';
 import { usd } from '../useRun';
 
-export function VirtualCardWidget({ state }: { state: RunState | null }) {
+export function VirtualCardWidget({ state, hideLimits = false }: { state: RunState | null; hideLimits?: boolean }) {
   const c = state?.card;
   const settled = state?.machineState === 'SETTLED';
   const frozen = c?.card.card_status === 'INACTIVE';
@@ -12,7 +12,7 @@ export function VirtualCardWidget({ state }: { state: RunState | null }) {
   const ctrl = c?.card.authorization_controls;
 
   return (
-    <div className="space-y-3 p-3">
+    <div className={hideLimits ? '' : 'space-y-3 p-3'}>
       <div
         className={[
           'relative overflow-hidden rounded-2xl border p-4 transition-all duration-500',
@@ -54,7 +54,7 @@ export function VirtualCardWidget({ state }: { state: RunState | null }) {
         </div>
       </div>
 
-      <div className="rounded-lg border border-ink-700 bg-ink-850 p-3">
+      {!hideLimits && (<div className="rounded-lg border border-ink-700 bg-ink-850 p-3">
         <div className="mb-2 flex items-center justify-between text-[11px] font-semibold uppercase tracking-wide text-ink-400">
           <span className="flex items-center gap-1"><Lock className="h-3.5 w-3.5" /> Rail-enforced limits</span>
           <span className="font-mono normal-case tracking-normal text-ink-500">GET /issuing/cards/{'{id}'}/limits</span>
@@ -84,7 +84,7 @@ export function VirtualCardWidget({ state }: { state: RunState | null }) {
             <div className="pt-1 font-mono text-[11px] text-ink-400">$1,000.00 passes · $1,000.01 declines (LIMIT_EXCEEDED)</div>
           </div>
         )}
-      </div>
+      </div>)}
     </div>
   );
 }

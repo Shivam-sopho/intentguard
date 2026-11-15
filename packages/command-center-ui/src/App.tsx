@@ -1,67 +1,82 @@
-import { Activity, CreditCard, FileText, LineChart, Radio } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
 import { ActStepper } from './components/ActStepper';
-import { ActionPanel, NarrativeBlock } from './components/ActionPanel';
-import { CashflowChart } from './components/CashflowChart';
-import { ContractPanel } from './components/ContractPanel';
-import { LiveTelemetryConsole } from './components/LiveTelemetryConsole';
-import { VirtualCardWidget } from './components/VirtualCardWidget';
-import { VisaTapPassport } from './components/VisaTapPassport';
+import { BlockedScreen, CardScreen, PaidScreen, PlanScreen, RulesScreen, useScrollTop, type ScreenProps } from './components/screens';
+import { TechDrawer } from './components/TechDrawer';
 import { useRun } from './useRun';
 
+/** Which step screen an in-flight action belongs to. */
+function screenForBusy(label: string | null | undefined): number | null {
+  if (!label) return null;
+  if (label.includes('Act 5')) return 4; // resolving is shown on the "stop the overcharge" screen
+  if (label.includes('shock')) return 3; // checkout starts from the card screen
+  if (label.includes('approval')) return 3;
+  if (label.includes('Act 2')) return 2;
+  if (label.includes('Act 1')) return 1;
+  return null;
+}
+
 export default function App() {
-  const { state, events, connected, call, runFullDemo, demoRunning } = useRun();
-  const g = state?.guardrails;
+  const { state, events, call, runFullDemo, demoRunning } = useRun();
+  const [view, setView] = useState(1);
+  const [drawer, setDrawer] = useState(false);
+  const [busySince, setBusySince] = useState<string | null>(null);
+  const lastAct = useRef(0);
+
+  // Follow the run: when an act completes, show the screen with its results.
+  useEffect(() => {
+    if (!state) return;
+    if (state.act !== lastAct.current) {
+      lastAct.current = state.act;
+      setView(Math.max(1, state.act));
+    }
+  }, [state?.act]);
+
+  // While an action runs, show its screen with the live activity feed.
+  const busyScreen = screenForBusy(state?.busy);
+  useEffect(() => {
+    if (busyScreen) {
+      setView(busyScreen);
+      setBusySince(new Date(Date.now() - 1000).toISOString());
+    }
+  }, [busyScreen]);
+
+  useScrollTop(view);
+
+  if (!state) {
+    return <div className="grid min-h-full place-items-center text-ink-400">Connecting to IntentGuard…</div>;
+  }
+
+  const props: ScreenProps = {
+    state,
+    call,
+    busy: Boolean(state.busy) || demoRunning,
+    working: busyScreen === view,
+    events,
+    busySince,
+    goTo: setView,
+    openDrawer: () => setDrawer(true),
+  };
 
   return (
-    <div className="flex min-h-full flex-col lg:h-full">
-      <ActStepper state={state} connected={connected} demoRunning={demoRunning} onRunDemo={() => runFullDemo()} onReset={() => call('reset').catch(() => undefined)} />
-
-      <main className="grid flex-1 grid-cols-1 content-start gap-3 p-3 lg:min-h-0 lg:content-stretch lg:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)_minmax(0,1fr)] lg:overflow-hidden">
-        {/* LEFT: contract + treasury */}
-        <section className="flex flex-col gap-3 lg:min-h-0 lg:overflow-y-auto lg:pr-1 scrollbar-thin">
-          <div className="panel">
-            <div className="panel-title">
-              <LineChart className="h-3.5 w-3.5" /> 8-week treasury projection
-              {g && <span className="ml-auto font-mono normal-case tracking-normal text-ink-400">opening ${g.openingBalance.toLocaleString()} · floor ${g.reserveFloor.toLocaleString()}</span>}
-            </div>
-            <CashflowChart state={state} />
-            {state?.plan && (
-              <div className="px-3 pb-3">
-                <NarrativeBlock title="Why monthly" n={state.plan.narrative} />
-              </div>
-            )}
-          </div>
-          <div className="panel">
-            <div className="panel-title"><FileText className="h-3.5 w-3.5" /> Vendor order form · CloudScale Inc</div>
-            <ContractPanel state={state} />
-          </div>
-        </section>
-
-        {/* CENTER: card + actions + TAP */}
-        <section className="flex flex-col gap-3 lg:min-h-0 lg:overflow-y-auto lg:pr-1 scrollbar-thin">
-          <div className="panel">
-            <div className="panel-title"><Activity className="h-3.5 w-3.5" /> Agent control</div>
-            <ActionPanel state={state} call={call} disabled={demoRunning} />
-          </div>
-          <div className="panel">
-            <div className="panel-title"><CreditCard className="h-3.5 w-3.5" /> Airwallex Visa virtual card</div>
-            <VirtualCardWidget state={state} />
-          </div>
-          <div className="panel">
-            <div className="panel-title"><Radio className="h-3.5 w-3.5" /> Visa TAP agent passport</div>
-            <VisaTapPassport state={state} onProbe={() => call('probe/unsigned-bot').catch(() => undefined)} />
-          </div>
-        </section>
-
-        {/* RIGHT: telemetry */}
-        <section className="panel flex min-h-[420px] flex-col lg:min-h-0">
-          <div className="panel-title">
-            <span className={`h-2 w-2 rounded-full ${connected ? 'bg-status-good' : 'bg-status-critical'}`} /> Live API & protocol telemetry
-            <span className="ml-auto font-mono normal-case tracking-normal text-ink-500">{state?.rail.mode === 'LIVE' ? 'api.sandbox.airwallex.com' : state?.rail.mode === 'EMULATOR' ? 'offline emulator' : ''}</span>
-          </div>
-          <LiveTelemetryConsole events={events} />
-        </section>
+    <div className="min-h-full">
+      <ActStepper
+        state={state}
+        view={view}
+        onView={setView}
+        onRunDemo={() => runFullDemo()}
+        onReset={() => call('reset').catch(() => undefined)}
+        onOpenDrawer={() => setDrawer(true)}
+        eventCount={events.length}
+        demoRunning={demoRunning}
+      />
+      <main>
+        {view === 1 && <RulesScreen {...props} />}
+        {view === 2 && <PlanScreen {...props} />}
+        {view === 3 && <CardScreen {...props} />}
+        {view === 4 && <BlockedScreen {...props} />}
+        {view === 5 && <PaidScreen {...props} />}
       </main>
+      <TechDrawer open={drawer} onClose={() => setDrawer(false)} state={state} events={events} onProbe={() => call('probe/unsigned-bot').catch(() => undefined)} />
     </div>
   );
 }

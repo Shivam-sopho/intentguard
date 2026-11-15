@@ -20,7 +20,7 @@ IntentGuard buys a SaaS subscription for a finance team. It reads the vendor's o
 
 ```
                  ┌──────────────── command-center-ui (React + Tailwind + Recharts) ────────────────┐
-                 │  stepper · 8-week chart · contract · card widget · TAP passport · live telemetry │
+                 │  guided 5-step flow, one decision per screen · "Under the hood" drawer (raw API) │
                  └───────────────▲──────────────────────── SSE /api/events ──────────────────────────┘
                                  │
 ┌────────────────────────────────┴───────────── server (Express orchestrator) ─────────────────────────────┐
@@ -78,7 +78,7 @@ cp .env.example .env        # optional: add Airwallex sandbox + Anthropic keys
 npm run dev                 # API :8787 + UI http://localhost:5173
 ```
 
-Click **Run full 5-act demo**, or step through the acts by hand.
+The UI walks through the story one step per screen, with one action per step. Click **Auto-play demo** to play it all, or step through by hand. **Under the hood** opens a drawer with every Airwallex call, TAP signature, engine decision and state transition, for judges who want the raw evidence.
 
 | Command | What it does |
 |---|---|

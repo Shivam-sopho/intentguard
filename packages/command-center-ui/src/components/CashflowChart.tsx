@@ -12,7 +12,7 @@ const C = {
   axis: '#7a7b85',
 };
 
-export function CashflowChart({ state }: { state: RunState | null }) {
+export function CashflowChart({ state, compact = false }: { state: RunState | null; compact?: boolean }) {
   const g = state?.guardrails;
   const d = state?.plan?.decision;
 
@@ -65,7 +65,7 @@ export function CashflowChart({ state }: { state: RunState | null }) {
           Reserve floor {usd(g.reserveFloor, 0)}
         </span>
       </div>
-      <div className="h-[230px]">
+      <div className={compact ? 'h-[260px]' : 'h-[230px]'}>
         <ResponsiveContainer width="100%" height="100%">
           <ComposedChart data={data} margin={{ top: 14, right: 64, bottom: 0, left: 4 }}>
             <CartesianGrid stroke={C.grid} vertical={false} />
@@ -105,6 +105,8 @@ export function CashflowChart({ state }: { state: RunState | null }) {
         </ResponsiveContainer>
       </div>
 
+      {!compact && (
+        <>
       <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2">
         {d.verdicts.map((v) => (
           <div key={v.optionId} className={`rounded-lg border px-3 py-2 ${v.safe ? 'border-status-good/30 bg-status-good/5' : 'border-status-critical/40 bg-status-critical/10'}`}>
@@ -128,6 +130,8 @@ export function CashflowChart({ state }: { state: RunState | null }) {
           <span className="flex items-center gap-1 text-ink-300"><CalendarClock className="h-3.5 w-3.5 text-flame-400" /> {d.upgradeTrigger.condition}</span>
         )}
       </div>
+        </>
+      )}
     </div>
   );
 }

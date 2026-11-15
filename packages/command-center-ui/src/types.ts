@@ -141,6 +141,7 @@ export interface RunState {
   };
   incident?: {
     verification: { approvedBindingHash: string; observedBindingHash: string; diffs: IntentDiff[]; unapprovedLineItems: LineItem[]; overage: number; summary: string };
+    attemptedAmount: number;
     failureReason: string;
     cardStatusAfter: string;
     retry?: { outcome: string; failure_reason?: string };

@@ -84,7 +84,7 @@ export interface RunState {
   card?: { card: Card; limits: CardLimits; cardholderId: string; createPayload: CardCreatePayload; mcpCardholderShape: unknown };
   tap?: { keyid: string; jwk: unknown; lastSignatureInput?: string; lastSignatureBase?: string; lastTag?: TapTag; verifications: number };
   checkout?: { cart: Cart; cartCheck: IntentVerification; order?: Order; chargeCheck?: IntentVerification; shadow?: ShadowDecision; railAgreesWithPolicy?: boolean };
-  incident?: { verification: IntentVerification; failureReason: string; frozenAt: string; cardStatusAfter: string; retry?: { outcome: string; failure_reason?: string }; narrative: Narrative; limitsAfterFreeze: CardLimits };
+  incident?: { verification: IntentVerification; attemptedAmount: number; failureReason: string; frozenAt: string; cardStatusAfter: string; retry?: { outcome: string; failure_reason?: string }; narrative: Narrative; limitsAfterFreeze: CardLimits };
   reapproval?: ApprovalRecord & { verified: boolean };
   settlement?: { order: Order; narrative: Narrative; limitsAfter: CardLimits; settledAt: string; cardStatus: string };
   triggers: { id: string; week: number; condition: string; action: string; status: 'SCHEDULED' }[];
@@ -539,6 +539,7 @@ export class Orchestrator {
       this.llmEvent('Claude wrote the incident report', narrative.trace, { grounded: narrative.grounded });
       this.state.incident = {
         verification: chargeCheck,
+        attemptedAmount: order.charged_amount,
         failureReason: order.authorization.failure_reason ?? 'APPROVED_THEN_REVERSED',
         frozenAt: new Date().toISOString(),
         cardStatusAfter: frozen.card_status,

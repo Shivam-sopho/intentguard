@@ -6,7 +6,6 @@
   color-scheme: dark;
 }
 html, body, #root { min-height: 100%; }
-@media (min-width: 1024px) { html, body, #root { height: 100%; } }
 body { background: #0b0c10; }
 
 .panel {
