@@ -1,0 +1,22 @@
+sequenceDiagram
+  autonumber
+  actor Op as Operator
+  participant Ag as IntentGuard agent
+  participant En as Deterministic engine
+  participant V as Vendor shop
+  participant AX as Airwallex Issuing
+  Op->>Ag: Approve $1,000 per month
+  Ag->>En: Sign the intent (SHA-256 + Ed25519)
+  Ag->>AX: Create virtual card: $1,000 limit, software MCC, USD only
+  Ag->>V: Checkout, signed with Visa Trusted Agent Protocol
+  V->>AX: Authorize $1,250 (hidden $250 fee)
+  AX-->>V: DECLINED · LIMIT_EXCEEDED
+  Ag->>En: Charge fingerprint differs from the approval
+  Ag->>AX: Freeze card (INACTIVE)
+  V->>AX: Retry the $250 on its own
+  AX-->>V: DECLINED · CARD_INACTIVE
+  Op->>Ag: Hold them to $1,000
+  Ag->>En: New cart matches the approval
+  Ag->>AX: Unfreeze card
+  V->>AX: Authorize $1,000, then capture
+  AX-->>V: APPROVED · CLEARED

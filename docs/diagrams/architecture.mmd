@@ -1,0 +1,32 @@
+flowchart TB
+  OP(["Finance operator"]) --> UI
+  subgraph UI["Command center · React"]
+    direction TB
+    U1["Guided 5-step flow"]
+    U2["Under the hood:<br/>every API call and signature"]
+  end
+  UI <--> SRV["Server · runs the steps in order<br/>(does no money math itself)"]
+  SRV --> DET
+  SRV --> AI
+  SRV --> ADP
+  subgraph DET["Deterministic engine · no AI"]
+    direction TB
+    D1["8-week cash forecast<br/>+ reserve floor"]
+    D2["Card policy: inclusive limits,<br/>merchant category, currency"]
+    D3["SHA-256 intent fingerprint<br/>+ Ed25519 approval"]
+    D4["Visa TAP request signing<br/>(RFC 9421)"]
+    D5["Guarded state machine"]
+  end
+  subgraph AI["Probabilistic layer · Claude"]
+    direction TB
+    C1["Reads the vendor contract"]
+    C2["Explains every decision"]
+    G["Grounding check: every price<br/>must appear in the source"]
+    C1 --> G
+  end
+  subgraph ADP["Connections"]
+    direction TB
+    AWX[("Airwallex sandbox<br/>Issuing + simulation")]
+    DOCS[("Airwallex Docs MCP")]
+    SHOP[("Vendor shop<br/>verifies Visa TAP")]
+  end

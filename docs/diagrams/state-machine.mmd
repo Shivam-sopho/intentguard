@@ -1,0 +1,15 @@
+stateDiagram-v2
+  [*] --> DRAFT
+  DRAFT --> GUARDRAILS_SET: balance read, floor set
+  GUARDRAILS_SET --> PLAN_PROPOSED: a reserve-safe option exists
+  GUARDRAILS_SET --> ESCALATED: no option keeps the floor
+  PLAN_PROPOSED --> AWAITING_APPROVAL
+  AWAITING_APPROVAL --> APPROVED: valid Ed25519 signature
+  APPROVED --> CARD_ISSUED: card ACTIVE
+  CARD_ISSUED --> CHECKOUT_IN_PROGRESS: cart matches intent
+  CHECKOUT_IN_PROGRESS --> AUTHORIZED: rail approved + charge matches
+  CHECKOUT_IN_PROGRESS --> QUARANTINED_FROZEN: drift detected, card INACTIVE
+  QUARANTINED_FROZEN --> CARD_ISSUED: re-approved + cart matches + card ACTIVE
+  AUTHORIZED --> SETTLED: CLEARING + APPROVED
+  SETTLED --> [*]
+  ESCALATED --> [*]

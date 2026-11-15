@@ -1,0 +1,8 @@
+flowchart LR
+  X["Vendor tries<br/>to charge the card"] --> L1{"<b>Layer 1</b><br/>Airwallex card controls<br/>limit · merchant · currency"}
+  L1 -- "breaks a rule" --> DEC["Declined at the bank<br/>(e.g. LIMIT_EXCEEDED)"]
+  L1 -- "within the rules" --> L2{"<b>Layer 2</b><br/>Agent checks the charge<br/>fingerprint vs. approval"}
+  L2 -- "matches" --> OK["Captured and cleared"]
+  L2 -- "differs" --> FR["Freeze the card<br/>+ reverse the charge"]
+  DEC --> FR
+  FR --> L3["<b>Layer 3</b><br/>Human decides:<br/>hold to approved terms<br/>or re-approve"]

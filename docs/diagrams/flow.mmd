@@ -1,0 +1,7 @@
+flowchart LR
+  A["<b>1 · Set the rules</b><br/>live Airwallex balance<br/>+ safety floor"] --> B["<b>2 · Choose a plan</b><br/>Claude reads the contract<br/>code forecasts 8 weeks of cash"]
+  B --> C["<b>3 · Issue the card</b><br/>signed approval<br/>Airwallex virtual Visa card"]
+  C --> D{"<b>4 · Checkout</b><br/>does the vendor<br/>change the deal?"}
+  D -- "adds a fee or<br/>switches the plan" --> E["<b>Blocked</b><br/>card declines · agent freezes<br/>and reverses · no money moves"]
+  E -- "operator: hold them<br/>to the approved price" --> F["<b>5 · Pay safely</b><br/>exactly the approved amount<br/>captured and cleared"]
+  D -- "no" --> F

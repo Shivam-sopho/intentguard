@@ -1,51 +1,125 @@
 # IntentGuard
 
-**A procurement agent that checks future cash before it buys, can only spend what a human approved, and freezes its own card when a merchant changes the price.**
+**An AI purchasing agent that checks future cash before it buys, can only spend what a human approved, and freezes its own card when a vendor changes the deal.**
 
-IntentGuard buys a SaaS subscription for a finance team. It reads the vendor's order form with Claude. Deterministic code projects 8 weeks of cash for each billing option and chooses the cheapest option that keeps the reserve floor. It issues an Airwallex Visa virtual card whose controls only allow the approved charge, and it checks out with a Visa Trusted Agent Protocol (TAP) signed request. In the demo the merchant adds a fee mid-checkout. The card rail declines it, the agent detects that the charge no longer matches the intent hash, and it freezes the card. Nothing is paid until a human re-approves the original terms.
+IntentGuard buys software subscriptions for a finance team. Claude reads the vendor's contract. Deterministic code forecasts 8 weeks of cash for every billing option and picks the cheapest one that never drops below a safety floor. A human approves those exact terms, and the agent gets an **Airwallex virtual Visa card** that can pay only that. It checks out with requests signed under the **Visa Trusted Agent Protocol**. If the vendor adds a fee or switches the plan at payment time, the card declines it, the agent freezes the card, and nothing is paid until a human decides.
 
-> Track: **Starter Kit 2, Intent-Bound Purchase Agent** (Airwallex Issuing card controls), combined with the reserve-floor logic of Starter Kit 1 and a Visa TAP checkout.
+> **Track:** Starter Kit 2, Intent-Bound Purchase Agent (Airwallex Issuing card controls), using the reserve-floor logic of Starter Kit 1 and a Visa TAP checkout. **Verified live** on the Airwallex sandbox.
 
-## The five acts
+## The problem
 
-| Act | What happens | Where the decision is made |
+1. **Liquidity-blind discounts.** "20% off if you pay yearly" looks smart until it leaves the account short when payroll lands weeks later.
+2. **Prompts can't enforce money rules.** Tell an AI "spend at most $1,000" and a vendor can still slip in a $250 fee at checkout. Limits must be enforced by code and by the card itself.
+3. **Merchants block bots.** Shops reject automated buyers that can't prove who they are.
+
+## How it works
+
+```mermaid
+flowchart LR
+  A["<b>1 · Set the rules</b><br/>live Airwallex balance<br/>+ safety floor"] --> B["<b>2 · Choose a plan</b><br/>Claude reads the contract<br/>code forecasts 8 weeks of cash"]
+  B --> C["<b>3 · Issue the card</b><br/>signed approval<br/>Airwallex virtual Visa card"]
+  C --> D{"<b>4 · Checkout</b><br/>does the vendor<br/>change the deal?"}
+  D -- "adds a fee or<br/>switches the plan" --> E["<b>Blocked</b><br/>card declines · agent freezes<br/>and reverses · no money moves"]
+  E -- "operator: hold them<br/>to the approved price" --> F["<b>5 · Pay safely</b><br/>exactly the approved amount<br/>captured and cleared"]
+  D -- "no" --> F
+```
+
+| Step | What happens | Who decides |
 |---|---|---|
-| 1. Goal & guardrails | Fetch the USD balance (`GET /api/v1/balances/current`) and set the reserve floor | Operator |
-| 2. Plan | The agent fetches the order form with a TAP `agent-browser-auth` request. Claude extracts the prices and risk clauses, and code checks every figure against the source. The engine projects 8 weeks: **Annual $9,600 upfront drops cash to $36,400 in week 7, $3,600 below the $40,000 floor. Monthly keeps the low point at $44,000.** The engine picks Monthly, schedules a week-8 re-evaluation for when the $18,000 receivable lands, and Claude explains the trade-off | `deterministic-engine` |
-| 3. Provision & shock | The operator's Ed25519 signature is bound to the SHA-256 intent hash. The card is issued (`POST /issuing/cardholders/create`, `POST /issuing/cards/create`) with inclusive `PER_TRANSACTION` $1,000 and `MONTHLY` $1,000 limits, MCC 5734 only, USD only. The limits are read back (`GET /issuing/cards/{id}/limits`). The agent checks out with TAP `agent-payer-auth` and an `agenticPaymentContainer`. The merchant's billing system then authorizes **$1,250** (adding a $250 "Mandatory Enterprise Onboarding Fee") | Merchant (chaos) |
-| 4. Rail quarantine | Airwallex declines the authorization (`process_result: DECLINED`, `failure_reason: LIMIT_EXCEEDED`), which maps to `FAILED`. The charge's binding hash differs from the intent's, so the agent freezes the card (`POST /issuing/cards/{id}/update` → `INACTIVE`). The merchant's retry of the $250 as a separate charge is declined with `CARD_INACTIVE`. Claude writes the incident report | Airwallex card controls + engine |
-| 5. Verified settlement | The operator re-signs the original intent and the vendor drops the fee. Code requires the new cart's hash to match before it unfreezes the card. A new TAP checkout authorizes $1,000.00, which is then captured (`CLEARING` + `APPROVED`) and moves the state machine to `SETTLED`. The audit shows $0 unauthorized spend, the reserve preserved, and the week-8 trigger still scheduled | Engine state machine |
+| **1. Set the rules** | Read the live Airwallex USD balance (`GET /api/v1/balances/current`) and set the safety floor | Operator |
+| **2. Choose a plan** | Upload the vendor's order form. Claude extracts prices and risky clauses; code verifies every figure is in the document. The engine forecasts 8 weeks: *yearly $9,600 upfront drops cash to $36,400 in week 7, below the $40,000 floor; monthly keeps the low point at $44,000*. It picks monthly and schedules a week-8 re-check | Deterministic engine |
+| **3. Issue the card** | The operator's Ed25519 signature is bound to the SHA-256 intent. Airwallex issues a virtual card with inclusive `PER_TRANSACTION` and `MONTHLY` limits of $1,000, MCC 5734 only, USD only | Operator + engine |
+| **4. Stop the overcharge** | At checkout the vendor adds a $250 fee or switches the plan. Airwallex declines over-limit charges; the agent detects the intent mismatch, freezes the card, reverses anything the rail let through, and looks up the decline code in Airwallex's docs (Docs MCP) | Airwallex card controls + engine |
+| **5. Pay safely** | The operator holds the vendor to the approved terms. The cart must match the intent again before the card is released; then exactly $1,000 is authorized, captured and cleared | Engine state machine |
+
+### What happens at checkout
+
+```mermaid
+sequenceDiagram
+  autonumber
+  actor Op as Operator
+  participant Ag as IntentGuard agent
+  participant En as Deterministic engine
+  participant V as Vendor shop
+  participant AX as Airwallex Issuing
+  Op->>Ag: Approve $1,000 per month
+  Ag->>En: Sign the intent (SHA-256 + Ed25519)
+  Ag->>AX: Create virtual card: $1,000 limit, software MCC, USD only
+  Ag->>V: Checkout, signed with Visa Trusted Agent Protocol
+  V->>AX: Authorize $1,250 (hidden $250 fee)
+  AX-->>V: DECLINED · LIMIT_EXCEEDED
+  Ag->>En: Charge fingerprint differs from the approval
+  Ag->>AX: Freeze card (INACTIVE)
+  V->>AX: Retry the $250 on its own
+  AX-->>V: DECLINED · CARD_INACTIVE
+  Op->>Ag: Hold them to $1,000
+  Ag->>En: New cart matches the approval
+  Ag->>AX: Unfreeze card
+  V->>AX: Authorize $1,000, then capture
+  AX-->>V: APPROVED · CLEARED
+```
+
+### Three layers of protection
+
+```mermaid
+flowchart LR
+  X["Vendor tries<br/>to charge the card"] --> L1{"<b>Layer 1</b><br/>Airwallex card controls<br/>limit · merchant · currency"}
+  L1 -- "breaks a rule" --> DEC["Declined at the bank<br/>(e.g. LIMIT_EXCEEDED)"]
+  L1 -- "within the rules" --> L2{"<b>Layer 2</b><br/>Agent checks the charge<br/>fingerprint vs. approval"}
+  L2 -- "matches" --> OK["Captured and cleared"]
+  L2 -- "differs" --> FR["Freeze the card<br/>+ reverse the charge"]
+  DEC --> FR
+  FR --> L3["<b>Layer 3</b><br/>Human decides:<br/>hold to approved terms<br/>or re-approve"]
+```
+
+The card limit catches overcharges without any AI involved. The fingerprint check catches what limits can't, such as a switch to a cheaper but unapproved plan. The human always makes the final call.
 
 ## Architecture: deterministic vs. probabilistic
 
+```mermaid
+flowchart TB
+  OP(["Finance operator"]) --> UI
+  subgraph UI["Command center · React"]
+    direction TB
+    U1["Guided 5-step flow"]
+    U2["Under the hood:<br/>every API call and signature"]
+  end
+  UI <--> SRV["Server · runs the steps in order<br/>(does no money math itself)"]
+  SRV --> DET
+  SRV --> AI
+  SRV --> ADP
+  subgraph DET["Deterministic engine · no AI"]
+    direction TB
+    D1["8-week cash forecast<br/>+ reserve floor"]
+    D2["Card policy: inclusive limits,<br/>merchant category, currency"]
+    D3["SHA-256 intent fingerprint<br/>+ Ed25519 approval"]
+    D4["Visa TAP request signing<br/>(RFC 9421)"]
+    D5["Guarded state machine"]
+  end
+  subgraph AI["Probabilistic layer · Claude"]
+    direction TB
+    C1["Reads the vendor contract"]
+    C2["Explains every decision"]
+    G["Grounding check: every price<br/>must appear in the source"]
+    C1 --> G
+  end
+  subgraph ADP["Connections"]
+    direction TB
+    AWX[("Airwallex sandbox<br/>Issuing + simulation")]
+    DOCS[("Airwallex Docs MCP")]
+    SHOP[("Vendor shop<br/>verifies Visa TAP")]
+  end
 ```
-                 ┌──────────────── command-center-ui (React + Tailwind + Recharts) ────────────────┐
-                 │  guided 5-step flow, one decision per screen · "Under the hood" drawer (raw API) │
-                 └───────────────▲──────────────────────── SSE /api/events ──────────────────────────┘
-                                 │
-┌────────────────────────────────┴───────────── server (Express orchestrator) ─────────────────────────────┐
-│  sequences acts; never computes money itself                                                            │
-│                                                                                                         │
-│  ┌──────── deterministic-engine (pure TS, zero LLM) ────────┐   ┌──── cognitive-agent (Claude) ────────┐ │
-│  │ money.ts            integer-cent math, major units       │   │ contractParser.ts  structured output │ │
-│  │ cashflowProjector   8-wk projection, inclusive floor,     │   │   → grounded by code: every price &  │ │
-│  │                     plan rule, upgrade trigger            │   │     quote must be verbatim in source │ │
-│  │ cardPolicyBuilder   Airwallex payloads, shadow evaluator  │   │ decisionNarrator.ts explains facts;  │ │
-│  │ intentHashSigner    SHA-256 intent + binding hash,        │   │   every $ figure checked vs facts    │ │
-│  │                     Ed25519 operator approval             │   └──────────────────────────────────────┘ │
-│  │ visaTap.ts          RFC 9421 signer + merchant verifier   │                                            │
-│  │ stateMachine.ts     guarded transitions, rail mapping     │                                            │
-│  │ idempotency.ts      UUIDv4 request_id ledger              │                                            │
-│  └───────────────────────────────────────────────────────────┘                                            │
-│                                                                                                         │
-│  ┌──────────────── simulation-adapter ────────────────────────────────────────────────────────────────┐ │
-│  │ airwallexClient.ts     LIVE sandbox: login, balances, cardholders, cards, limits, update            │ │
-│  │ airwallexEmulator.ts   OFFLINE emulator with the same interface (always labelled "EMULATOR")        │ │
-│  │ airwallexSimulation.ts /simulation/issuing/create · lifecycles/{id}/capture · /reverse              │ │
-│  │ mockVendorStorefront   CloudScale merchant with a TAP verifier at the edge + chaos fee toggle       │ │
-│  └─────────────────────────────────────────────────────────────────────────────────────────────────────┘ │
-└──────────────────────────────────────────────────────────────────────────────────────────────────────────┘
-```
+
+| Package | Role | Uses AI? |
+|---|---|---|
+| `packages/deterministic-engine` | Integer-cent money math, 8-week forecast, plan rule, Airwallex card policy and shadow evaluator, SHA-256 intent and binding hashes, Ed25519 approvals, Visa TAP signer and verifier, guarded state machine, `request_id` ledger | **No** |
+| `packages/cognitive-agent` | Claude reads contracts (schema-validated structured output, grounded against the source) and writes explanations whose every dollar figure is checked against engine facts | Yes, Claude Opus 5.5 via the Anthropic API or headless Claude Code |
+| `packages/simulation-adapter` | Live Airwallex sandbox client, a labelled offline emulator with the same interface, the issuing simulation wrapper, the Airwallex Docs MCP client, and the mock vendor shop with a TAP verifier | No |
+| `packages/server` | Runs the five steps in order, handles contract uploads, streams telemetry to the UI | No |
+| `packages/command-center-ui` | Guided 5-step React flow plus an "Under the hood" drawer with every API call | No |
+
+More detail, including the state machine, is in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md). The pitch is in [docs/PITCH.md](docs/PITCH.md).
 
 **Rules this code enforces** (from the Airwallex builder guide):
 

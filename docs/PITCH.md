@@ -14,6 +14,17 @@ If the merchant changes the deal mid-checkout, IntentGuard stops it: an added fe
 
 ## How it works (5 steps)
 
+```mermaid
+flowchart LR
+  A["<b>1 · Set the rules</b><br/>live Airwallex balance<br/>+ safety floor"] --> B["<b>2 · Choose a plan</b><br/>Claude reads the contract<br/>code forecasts 8 weeks of cash"]
+  B --> C["<b>3 · Issue the card</b><br/>signed approval<br/>Airwallex virtual Visa card"]
+  C --> D{"<b>4 · Checkout</b><br/>does the vendor<br/>change the deal?"}
+  D -- "adds a fee or<br/>switches the plan" --> E["<b>Blocked</b><br/>card declines · agent freezes<br/>and reverses · no money moves"]
+  E -- "operator: hold them<br/>to the approved price" --> F["<b>5 · Pay safely</b><br/>exactly the approved amount<br/>captured and cleared"]
+  D -- "no" --> F
+```
+
+
 1. **Set the rules.** The agent reads the live Airwallex balance (`GET /api/v1/balances/current`). The operator sets a reserve floor for the next 8 weeks.
 2. **Choose a plan.** The operator uploads the vendor's order form (PDF or text). The agent fetches it over a TAP `agent-browser-auth` request, and Claude extracts the billing options and risky clauses.
    - **Grounding:** code rejects any price or quote that isn't verbatim in the document.
@@ -35,6 +46,18 @@ If the merchant changes the deal mid-checkout, IntentGuard stops it: an added fe
 5. **Pay safely.** The operator re-signs the original terms. The cart must match the intent hash again before the card is unfrozen. The TAP checkout is authorized, captured (`CLEARING` + `APPROVED`), and logged. A simulated refund restores the card's limit.
 
 ## Architecture: deterministic vs. probabilistic
+
+```mermaid
+flowchart LR
+  X["Vendor tries<br/>to charge the card"] --> L1{"<b>Layer 1</b><br/>Airwallex card controls<br/>limit · merchant · currency"}
+  L1 -- "breaks a rule" --> DEC["Declined at the bank<br/>(e.g. LIMIT_EXCEEDED)"]
+  L1 -- "within the rules" --> L2{"<b>Layer 2</b><br/>Agent checks the charge<br/>fingerprint vs. approval"}
+  L2 -- "matches" --> OK["Captured and cleared"]
+  L2 -- "differs" --> FR["Freeze the card<br/>+ reverse the charge"]
+  DEC --> FR
+  FR --> L3["<b>Layer 3</b><br/>Human decides:<br/>hold to approved terms<br/>or re-approve"]
+```
+
 
 | Layer | What it does | AI involved? |
 |---|---|---|
